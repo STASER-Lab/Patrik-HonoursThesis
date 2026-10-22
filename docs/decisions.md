@@ -24,7 +24,7 @@
 
 **Decision** - Use Elasticsearch version 9.5.5
 
-**Consequences** - Consistent results across local and Arbutus. Also helps reproducibility
+**Consequences** - Consistent results across local and Arbutus. Also, helps reproducibility
 
 --
 

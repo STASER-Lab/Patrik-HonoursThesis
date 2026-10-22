@@ -6,6 +6,6 @@ __pycache__/
 .coverage
 *.egg-info/
 
-# OS, editor
+# macOS, editor
 .DS_Store
 .vscode/
