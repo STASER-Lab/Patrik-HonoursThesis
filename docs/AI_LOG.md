@@ -6,4 +6,6 @@ Tracks AI assistance, for transparency in the research project
 
 | 2026-10-17 | Claude | Architecture planning | Reviewed architecture. Modified data flow for compatibility with Arbutus |
 
+ 2026-10-21 | ChatGPT | Troubleshooting | Editing sql queries. Revised for reproducibility |
+
 | Date | Tool | What it helped with | What I checked or changed |

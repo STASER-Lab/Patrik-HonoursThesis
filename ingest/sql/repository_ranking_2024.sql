@@ -1,4 +1,4 @@
--- Ranking of repositories by event count in 2024
+-- Ranking of repositories by event count
 SELECT
   repo.id                                         AS repo_id,
   ARRAY_AGG(repo.name ORDER BY created_at DESC LIMIT 1)[OFFSET(0)] AS latest_name,
