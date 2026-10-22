@@ -24,8 +24,8 @@ SELECT
   ROUND(SUM(IF(events >= p999, events, 0)) / SUM(events), 3) AS share_top_0_1pct
 FROM `insert saved ranking table name here`, t;
 
--- The 20 largest repositories by event count
+-- The 10 largest repositories by event count
 SELECT latest_name, events, pr_events, issue_comment_events, pr_review_events, name_count
 FROM `insert saved ranking table name here`
 ORDER BY events DESC
-LIMIT 20;
+LIMIT 10;

@@ -1,4 +1,4 @@
--- Estimate 2024 raw volume of the five event types from 12 sample days (one per month).
+-- Raw volume estimate of the five event types from 12 Wednesdays (one per month in MMDD format).
 WITH sample AS (
   SELECT type, BYTE_LENGTH(payload) AS payload_bytes
   FROM `githubarchive.day.2024*`
