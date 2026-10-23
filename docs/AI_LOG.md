@@ -10,4 +10,4 @@ Tracks AI assistance, for transparency in the research project
 
 | 2026-10-21 | ChatGPT | Troubleshooting | Editing sql queries. Revised for reproducibility |
 
-|  2026-10-22 | Claude | GH Archive download logic and Markdown formatting | Minor code and test changes |
+| 2026-10-22 | Claude | GH Archive download logic and Markdown formatting | Minor code and test changes |

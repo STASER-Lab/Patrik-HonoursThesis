@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it."
+title: "Scalable Elasticsearch infrastructure for software repository data"
+authors:
+  - family-names: "Balazsy"
+    given-names: "Patrik"
+version: 1.0.0
+license: MIT
+repository-code: "https://github.com/STASER-Lab/Patrik-HonoursThesis"
