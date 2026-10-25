@@ -128,7 +128,7 @@ def report(s: Stats) -> str:
            f"({s.all_bytes / 1e9:.2f} GB raw JSON). Unparseable lines: {s.bad_lines}\n",
            "## Volume of the five event types\n",
            "| Type | Events | Share of all events | Raw GB | Avg KB/event | Bot actors |",
-           "|---|---:|---:|---:|---:|---:|"]
+           "| --- | ---: | ---: | ---: | ---: | ---: |"]
     five_bytes = 0
     for t in EVENT_TYPES:
         n, b = s.count[t], s.bytes[t]
@@ -150,7 +150,7 @@ def report(s: Stats) -> str:
         acts = ", ".join(f"`{a}` {c:,}" for a, c in s.actions[t].most_common())
         out.append(f"Actions: {acts or 'none'}\n")
         out.append("| Field | Key present | Non-null |")
-        out.append("|---|---:|---:|")
+        out.append("| --- | ---: | ---: |")
         for field in REQUIRED[t]:
             out.append(f"| `{field}` | {pct(s.present[t][field], n)} | {pct(s.non_null[t][field], n)} |")
         out.append("")
