@@ -1,18 +1,10 @@
-"""Pipeline steps 2 and 3: keep the five event types and reject malformed events."""
+"""Transform step 3: keep the five event types and reject malformed events."""
 
 from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime
 from typing import Any
-
-EVENT_TYPES = frozenset({
-    "IssuesEvent",
-    "PullRequestEvent",
-    "IssueCommentEvent",
-    "PullRequestReviewEvent",
-    "PullRequestReviewCommentEvent",
-})
 
 TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -50,8 +42,6 @@ def parse_ts(value: str) -> datetime:
 
 def check(event: dict) -> str | None:
     t = event.get("type")
-    if t not in EVENT_TYPES:
-        return "not one of the five event types"
     if not event.get("payload"):
         return "empty payload"
     for path in _COMMON + REQUIRED[t]:
@@ -73,13 +63,9 @@ class Validator:
         self.seen_ids: set[str] = set()
         self.rejected: Counter[str] = Counter()
         self.accepted = 0
-        self.skipped_types = 0
 
     def __call__(self, event: dict) -> bool:
         reason = check(event)
-        if reason == "not one of the five event types":
-            self.skipped_types += 1
-            return False
         if reason is None and event["id"] in self.seen_ids:
             reason = "duplicate event id"
         if reason:

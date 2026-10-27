@@ -1,10 +1,14 @@
-"""Tests for validation and folding using small hand-made events."""
+"""Tests for validation, folding, and closing-keyword extraction."""
 
+import gzip
+import json
 import pytest
 import copy
 
-from ingest.pipeline.fold import Folder, is_bot_account
-from ingest.pipeline.validate import Validator, check
+from ingest.transform.screen import Screen
+from ingest.transform.fold import Folder, is_bot_account
+from ingest.transform.validate import Validator, check
+from ingest.transform.links import add_links, find_references
 
 REPO = {"id": 10, "name": "org/proj"}
 ALICE = {"id": 1, "login": "alice.r", "type": "User"}
@@ -16,6 +20,11 @@ def pr_obj(number=5, state="open", merged_at=None, closed_at=None, user=ALICE, f
     return {"number": number, "id": 999, "user": user, "title": "Fix", "body": "b",
             "state": state, "created_at": "2024-01-10T10:00:00Z", "closed_at": closed_at,
             "merged_at": merged_at, "base": {"repo": {"id": REPO["id"], "fork": fork}}}
+
+
+def _pr_with_body(number, body, eid):
+    return ev(eid, "PullRequestEvent", "2024-01-10T10:00:00Z",
+              {"action": "opened", "number": number, "pull_request": {**pr_obj(number=number), "body": body}})
 
 
 def ev(eid, t, created_at, payload, actor=ALICE):
@@ -42,6 +51,17 @@ def comment_on_pr(eid=2, user=BOB, at="2024-01-10T11:00:00Z", cid=77):
               "comment": {"id": cid, "user": user, "body": "LGTM", "created_at": at}}, actor=user)
 
 
+def write_lines(path, lines):
+    with gzip.open(path, "wt") as f:
+        for line in lines:
+            f.write(line + "\n")
+    return path
+
+
+def compact(event):
+    return json.dumps(event, separators=(",", ":"))
+
+
 def fold(*events):
     f = Folder()
     for e in events:
@@ -50,6 +70,35 @@ def fold(*events):
         f.add(e)
     return f
 
+
+# ----------------------------------------------------------------------------
+# Test screen.py
+
+def test_screen_passes_only_five_type_events(tmp_path):
+    lookalike = {"id": "9", "type": "PushEvent",
+                 "payload": {"note": 'quoted "type":"IssuesEvent" here'}}
+    path = write_lines(tmp_path / "2024-01-10-0.json.gz", [
+        compact(pr_opened(eid=1)),
+        compact({"id": "2", "type": "PushEvent"}),
+        compact(lookalike),
+        '{"type":"IssuesEvent", broken',
+        '["type":"IssuesEvent"]',
+        '[{"type":"IssuesEvent"}]',
+    ])
+    screen = Screen()
+    events = list(screen([path]))
+    assert [e["id"] for e in events] == ["1"]
+    assert screen.counts == {"passed": 1, "other_types": 2, "unparseable": 3}
+
+
+def test_screen_reads_files_in_the_order_given(tmp_path):
+    a = write_lines(tmp_path / "a.json.gz", [compact(pr_opened(eid=1))])
+    b = write_lines(tmp_path / "b.json.gz", [compact(pr_opened(eid=2)), compact(pr_opened(eid=3))])
+    assert [e["id"] for e in Screen()([b, a])] == ["2", "3", "1"]
+
+
+# ----------------------------------------------------------------------------
+# Test validate.py
 
 def test_empty_payload_rejected():
     assert check({**pr_opened(), "payload": {}}) == "empty payload"
@@ -67,23 +116,20 @@ def test_bad_timestamp_rejected():
     assert check(e) == "bad timestamp created_at"
 
 
-def test_other_types_are_skipped_not_rejected():
-    v = Validator()
-    assert not v({"id": "9", "type": "PushEvent"})
-    assert v.skipped_types == 1 and not v.rejected
-
-
 def test_duplicate_event_rejected():
     v = Validator()
     assert v(pr_opened()) and not v(pr_opened())
     assert v.rejected == {"duplicate event id": 1}
 
 
+# ----------------------------------------------------------------------------
+# Test fold.py
+
 def test_pr_events_fold_into_latest_state():
     f = fold(pr_opened(), pr_merged())
     pr = f.records["pull_request"]["10/5"]
     assert pr["state"] == "closed" and pr["merged"] is True
-    assert pr["merged_at"] == "2024-01-10T12:00:00Z" # GitHub/GH Archive timestamps are always UTC with a Z
+    assert pr["merged_at"] == "2024-01-10T12:00:00Z"    # GitHub/GH Archive timestamps are always UTC with a Z
     assert f.counts()["pull_request"] == 1
 
 
@@ -162,3 +208,48 @@ def test_person_login_follows_latest_event():
     renamed["actor"] = {**BOB, "login": "bob-new"}
     f = fold(comment_on_pr(), renamed)
     assert f.records["person"][BOB["id"]]["login"] == "bob-new"
+
+
+# ----------------------------------------------------------------------------
+# Test links.py
+
+def test_keywords_and_forms():
+    body = ("Fixes #12. Also closes: #13 and RESOLVED #14.\n"
+            "See https://github.com/org/proj/issues/15 - fixed https://github.com/org/proj/issues/16\n"
+            "fixes other/repo#17")
+    assert find_references(body) == [
+        ("fix", None, 12), ("close", None, 13), ("resolve", None, 14),
+        ("fix", "org/proj", 16), ("fix", "other/repo", 17)]
+
+
+def test_non_matches():
+    assert find_references("prefix #1, unfixed #2, see #4, fixes, #5") == []
+    assert find_references("Fixes #1, #2") == [("fix", None, 1)]
+    assert find_references(None) == []
+
+
+def test_add_links_types_targets_and_skips():
+    issue_event = comment_on_pr(eid=50, cid=500)
+    del issue_event["payload"]["issue"]["pull_request"]
+    issue_event["payload"]["issue"]["number"] = 7
+    f = Folder()
+    for e in (issue_event, pr_opened(eid=1),
+              _pr_with_body(8, "Fixes #7, fixes #5, fixes #99, fixes #8, fixes other/x#1, fixes #7", eid=2),
+              _pr_with_body(9, "closes org/proj#7", eid=3)):
+        f.add(e)
+    stats = add_links(f)
+    links = f.records["link"]
+    assert {k: v["target_type"] for k, v in links.items()} == {
+        "10/8->7": "issue", "10/8->5": "pr", "10/8->99": "unknown", "10/9->7": "issue"}
+    assert stats["self_reference_skipped"] == 1 and stats["cross_repo_skipped"] == 1
+    assert stats["duplicate_skipped"] == 1 and stats["links"] == 4
+
+
+def test_latest_body_wins():
+    f = Folder()
+    f.add(_pr_with_body(8, "fixes #1", eid=1))
+    edited = _pr_with_body(8, "fixes #2", eid=2)
+    edited["created_at"] = "2024-01-10T11:00:00Z"
+    f.add(edited)
+    add_links(f)
+    assert list(f.records["link"]) == ["10/8->2"]

@@ -1,4 +1,4 @@
-"""Pipeline step 3: fold validated events into entity records."""
+"""Transform step 4: fold validated events into entity records."""
 
 from __future__ import annotations
 
@@ -6,8 +6,7 @@ from typing import Any, Iterator
 
 from .validate import get
 
-ENTITIES = ("repository", "person", "issue", "pull_request", "comment", "review")
-
+ENTITIES = ("repository", "person", "issue", "pull_request", "comment", "review", "link")
 
 CURATED_BOT_LOGINS: frozenset[str] = frozenset({
     # Dependencies
@@ -65,7 +64,7 @@ CURATED_BOT_LOGINS: frozenset[str] = frozenset({
     "yoshi-code-bot",
 })
 
-Version = tuple  # (event created_at, event id)
+Version = tuple[int, int]	# (event created_at, event id)
 
 
 def key(repo_id: int, number: int) -> str:
