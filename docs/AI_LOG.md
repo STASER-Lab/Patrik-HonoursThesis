@@ -13,3 +13,5 @@ Tracks AI assistance, for transparency in the research project
 | 2026-10-22 | Claude | GH Archive download logic, sample logic and Markdown formatting | Minor code and test changes |
 
 | 2026-10-26 | Claude | Transform layer | Refactored transform steps to match standard ETL flow, editing tests and names, added linking between issues and pull requests |
+
+| 2026-10-27 | ChatGPT | Foratting advice and indexing logic | Used ruff to lint files and removed redundant steps in `entity_mappings()` |

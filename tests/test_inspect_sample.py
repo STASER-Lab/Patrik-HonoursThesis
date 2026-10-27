@@ -19,12 +19,21 @@ def test_get_path_distinguishes_missing_from_null():
 
 def test_counts_types_fields_and_pr_comments(tmp_path):
     events = [
-        {"type": "PullRequestEvent", "actor": {"login": "dependabot[bot]"},
-         "payload": {"action": "closed", "pull_request": {"merged_at": None}}},
-        {"type": "IssueCommentEvent", "actor": {"login": "alice"},
-         "payload": {"action": "created", "issue": {"pull_request": {"url": "x"}}}},
-        {"type": "IssueCommentEvent", "actor": {"login": "bob"},
-         "payload": {"action": "created", "issue": {}}},
+        {
+            "type": "PullRequestEvent",
+            "actor": {"login": "dependabot[bot]"},
+            "payload": {"action": "closed", "pull_request": {"merged_at": None}},
+        },
+        {
+            "type": "IssueCommentEvent",
+            "actor": {"login": "alice"},
+            "payload": {"action": "created", "issue": {"pull_request": {"url": "x"}}},
+        },
+        {
+            "type": "IssueCommentEvent",
+            "actor": {"login": "bob"},
+            "payload": {"action": "created", "issue": {}},
+        },
         {"type": "PushEvent"},
     ]
     write_sample(tmp_path / "2024-01-10-0.json.gz", events)

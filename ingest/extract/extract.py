@@ -1,4 +1,4 @@
-"""Extract GH Archive hourly files and verify each one is complete."""
+"""Extract GH Archive hourly files and verify each one is complete"""
 
 from __future__ import annotations
 
@@ -11,10 +11,11 @@ import time
 import urllib.error
 import urllib.request
 import zlib
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import BinaryIO, Callable, Iterator
+from typing import BinaryIO
 
 BASE_URL = "https://data.gharchive.org"
 CHUNK = 1 << 20  # 1 MiB
@@ -45,12 +46,14 @@ def is_complete_gzip(path: Path) -> bool:
             while f.read(CHUNK):
                 pass
         return True
-    except (EOFError, OSError, zlib.error):
+    except EOFError, OSError, zlib.error:
         return False
 
 
 def default_fetch(url: str) -> BinaryIO:
-    req = urllib.request.Request(url, headers={"User-Agent": "STASER-LAB (thesis research)"})
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "STASER-LAB (thesis research)"}
+    )
     return urllib.request.urlopen(req, timeout=60)
 
 
@@ -103,8 +106,16 @@ def append_manifest(manifest: Path, r: Result) -> None:
         w = csv.writer(f)
         if new:
             w.writerow(["hour", "file", "status", "bytes", "detail", "logged_at"])
-        w.writerow([r.hour.isoformat(), file_name(r.hour), r.status, r.bytes, r.detail,
-                    datetime.now().isoformat(timespec="seconds")])
+        w.writerow(
+            [
+                r.hour.isoformat(),
+                file_name(r.hour),
+                r.status,
+                r.bytes,
+                r.detail,
+                datetime.now().isoformat(timespec="seconds"),
+            ]
+        )
 
 
 def parse_day_or_hour(s: str) -> datetime:
@@ -118,8 +129,18 @@ def parse_day_or_hour(s: str) -> datetime:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Download GH Archive hourly files")
-    p.add_argument("--start", type=parse_day_or_hour, required=True, help="inclusive, e.g. 2024-01-10")
-    p.add_argument("--end", type=parse_day_or_hour, required=True, help="exclusive, e.g. 2024-01-11")
+    p.add_argument(
+        "--start",
+        type=parse_day_or_hour,
+        required=True,
+        help="inclusive, e.g. 2024-01-10",
+    )
+    p.add_argument(
+        "--end",
+        type=parse_day_or_hour,
+        required=True,
+        help="exclusive, e.g. 2024-01-11",
+    )
     p.add_argument("--out", type=Path, default=Path("data/raw"))
     p.add_argument("--dry-run", action="store_true", help="print the URLs only")
     args = p.parse_args(argv)
@@ -138,8 +159,14 @@ def main(argv: list[str] | None = None) -> int:
         append_manifest(manifest, r)
         total += r.bytes
         failed += r.status == "failed"
-        print(f"[{i}/{len(hours)}] {file_name(h):28} {r.status:8} {r.bytes / 1e6:8.1f} MB {r.detail}")
-    print(f"Done: {len(hours)} hours, {total / 1e9:.2f} GB on disk, {failed} failed. Manifest: {manifest}")
+        print(
+            f"[{i}/{len(hours)}] {file_name(h):28} "
+            f"{r.status:8} {r.bytes / 1e6:8.1f} MB {r.detail}"
+        )
+    print(
+        f"Done: {len(hours)} hours, "
+        f"{total / 1e9:.2f} GB on disk, {failed} failed. Manifest: {manifest}"
+    )
     return 1 if failed else 0
 
 
