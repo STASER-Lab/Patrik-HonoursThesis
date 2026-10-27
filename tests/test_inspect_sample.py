@@ -1,7 +1,7 @@
 import gzip
 import json
 
-from ingest.gharchive import inspect_sample as ins
+from ingest.extract import inspect_sample as ins
 
 
 def write_sample(path, events):
