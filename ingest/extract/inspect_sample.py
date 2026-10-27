@@ -6,7 +6,7 @@
   * bot signals and the share of issue comments that are actually on PRs
   * a naive extrapolation of raw bytes to all of 2024 (8,784 hours)
   
-This is not part of the pipeline. It is a tool to verify data quality.
+This is not part of the pipeline. It is a tool to verify data source quality.
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ class Stats:
                 self.present[t][field] += 1
                 if v is not None:
                     self.non_null[t][field] += 1
-        if str(get_path(ev, "actor.login")).endswith("[bot]"): # Not all bots are captured but it's a start
+        if str(get_path(ev, "actor.login")).endswith("[bot]"):  # Not all bots are captured but it's a start
             self.bot_login[t] += 1
         if t == "IssueCommentEvent" and get_path(ev, "payload.issue.pull_request") not in (MISSING, None):
             self.issue_comments_on_prs += 1

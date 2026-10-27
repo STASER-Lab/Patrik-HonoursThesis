@@ -1,4 +1,4 @@
-"""Pipeline step 1: download GH Archive hourly files and verify each one is complete."""
+"""Extract GH Archive hourly files and verify each one is complete."""
 
 from __future__ import annotations
 
