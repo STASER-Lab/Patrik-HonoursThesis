@@ -11,18 +11,42 @@ TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 _COMMON = ["id", "created_at", "actor.id", "actor.login", "repo.id", "repo.name"]
 
 REQUIRED: dict[str, list[str]] = {
-    "IssuesEvent": ["payload.action", "payload.issue.number", "payload.issue.user.id",
-                    "payload.issue.created_at"],
-    "PullRequestEvent": ["payload.action", "payload.number", "payload.pull_request.user.id",
-                         "payload.pull_request.created_at"],
-    "IssueCommentEvent": ["payload.issue.number", "payload.issue.user.id", "payload.issue.created_at",
-                          "payload.comment.id", "payload.comment.user.id", "payload.comment.created_at"],
-    "PullRequestReviewEvent": ["payload.pull_request.number", "payload.pull_request.user.id",
-                               "payload.pull_request.created_at", "payload.review.id",
-                               "payload.review.user.id", "payload.review.submitted_at"],
-    "PullRequestReviewCommentEvent": ["payload.pull_request.number", "payload.pull_request.user.id",
-                                      "payload.pull_request.created_at", "payload.comment.id",
-                                      "payload.comment.user.id", "payload.comment.created_at"],
+    "IssuesEvent": [
+        "payload.action",
+        "payload.issue.number",
+        "payload.issue.user.id",
+        "payload.issue.created_at",
+    ],
+    "PullRequestEvent": [
+        "payload.action",
+        "payload.number",
+        "payload.pull_request.user.id",
+        "payload.pull_request.created_at",
+    ],
+    "IssueCommentEvent": [
+        "payload.issue.number",
+        "payload.issue.user.id",
+        "payload.issue.created_at",
+        "payload.comment.id",
+        "payload.comment.user.id",
+        "payload.comment.created_at",
+    ],
+    "PullRequestReviewEvent": [
+        "payload.pull_request.number",
+        "payload.pull_request.user.id",
+        "payload.pull_request.created_at",
+        "payload.review.id",
+        "payload.review.user.id",
+        "payload.review.submitted_at",
+    ],
+    "PullRequestReviewCommentEvent": [
+        "payload.pull_request.number",
+        "payload.pull_request.user.id",
+        "payload.pull_request.created_at",
+        "payload.comment.id",
+        "payload.comment.user.id",
+        "payload.comment.created_at",
+    ],
 }
 
 _MISSING = object()
@@ -51,7 +75,7 @@ def check(event: dict) -> str | None:
         if path.endswith(("created_at", "submitted_at")):
             try:
                 parse_ts(value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return f"bad timestamp {path}"
     return None
 

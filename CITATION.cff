@@ -4,6 +4,6 @@ title: "Scalable Elasticsearch infrastructure for software repository data"
 authors:
   - family-names: "Balazsy"
     given-names: "Patrik"
-version: 1.0.0
+version: 1.0
 license: MIT
 repository-code: "https://github.com/STASER-Lab/Patrik-HonoursThesis"

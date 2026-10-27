@@ -3,6 +3,17 @@ data/
 *.json.gz
 *.ndjson
 
+# Secrets
+.env
+*.env
+!env.example
+*secrets*.json
+*.tfstate
+*.tfstate.*
+.terraform/
+clouds.yaml
+kubeconfig*
+
 # Python
 .venv/
 __pycache__/

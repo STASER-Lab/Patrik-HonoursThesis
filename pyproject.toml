@@ -1,4 +1,30 @@
-[dependency-groups]
-dev = [
-    "pytest",
-]
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Patrik-HonoursThesis"
+version = "1.0"
+description = "scalable-elasticsearch-infrastructure-for-software-repository-data"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools]
+py-modules = []
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

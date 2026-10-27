@@ -7,8 +7,8 @@ import json
 import sys
 import time
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from .fold import ENTITIES, Folder
 from .links import add_links
@@ -31,12 +31,12 @@ def run(files: Iterable[Path], keep: set[int] | None) -> tuple[Folder, dict]:
             if repo_id not in keep:
                 counts["outside_repo_list"] += 1
                 continue
-        # Step 3: validate the event and reject malformed events, counting the reasons for rejection
+        # Step 3: validate the event and reject malformed events
         if not validate(ev):
             continue
-        # Step 4: fold the event into the entity records, keeping only the latest version of each record
+        # Step 4: fold the event into the entity records
         folder.add(ev)
-        
+
     # Step 5: add links between issues and pull requests
     link_stats = add_links(folder)
 
@@ -66,7 +66,9 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("folder", type=Path)
     p.add_argument("--out", type=Path, default=Path("data/records"))
-    p.add_argument("--repos", type=Path, help="file of repository ids to keep (one per line)")
+    p.add_argument(
+        "--repos", type=Path, help="file of repository ids to keep (one per line)"
+    )
     args = p.parse_args(argv)
 
     files = sorted(args.folder.glob("*.json.gz"))
@@ -76,7 +78,10 @@ def main(argv: list[str] | None = None) -> int:
     keep = {int(x) for x in args.repos.read_text().split()} if args.repos else None
 
     folder, summary = run(files, keep)
-    summary = {"files": len(files), "repo_list": str(args.repos) if args.repos else None} | summary
+    summary = {
+        "files": len(files),
+        "repo_list": str(args.repos) if args.repos else None,
+    } | summary
     write_records(folder, args.out)
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))

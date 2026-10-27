@@ -5,23 +5,24 @@ from __future__ import annotations
 import gzip
 import json
 from collections import Counter
+from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Iterable, Iterator
 
-EVENT_TYPES = frozenset({
-    "IssuesEvent",
-    "PullRequestEvent",
-    "IssueCommentEvent",
-    "PullRequestReviewEvent",
-    "PullRequestReviewCommentEvent",
-})
+EVENT_TYPES = frozenset(
+    {
+        "IssuesEvent",
+        "PullRequestEvent",
+        "IssueCommentEvent",
+        "PullRequestReviewEvent",
+        "PullRequestReviewCommentEvent",
+    }
+)
 
 # Pre-filter checking bytes first
 _TYPE_MARKERS = tuple(f'"type":"{t}"'.encode() for t in EVENT_TYPES)
 
 
 class Screen:
-
     def __init__(self) -> None:
         self.counts: Counter[str] = Counter()
 
@@ -41,7 +42,9 @@ class Screen:
                         self.counts["unparseable"] += 1
                         continue
                     if event.get("type") not in EVENT_TYPES:
-                        self.counts["other_types"] += 1      # passed the byte check, wrong type
+                        self.counts["other_types"] += (
+                            1  # passed the byte check, wrong type
+                        )
                         continue
                     self.counts["passed"] += 1
                     yield event
