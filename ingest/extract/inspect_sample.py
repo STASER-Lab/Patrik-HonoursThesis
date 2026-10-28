@@ -5,7 +5,7 @@
   * bot signals and the share of issue comments that are actually on PRs
   * a naive extrapolation of raw bytes to all of 2024 (8,784 hours)
 
-This is not part of the pipeline. It is a tool to verify data source quality.
+This is not a part of the pipeline. It is a tool to verify source data quality.
 """
 
 from __future__ import annotations

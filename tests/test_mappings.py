@@ -13,7 +13,7 @@ from ingest.load.mappings import (
 from ingest.transform.fold import Folder
 from ingest.transform.links import add_links
 
-from .test_transform import BOB, comment_on_pr, ev, pr_merged, pr_obj, pr_opened
+from .test_operations import BOB, comment_on_pr, ev, pr_merged, pr_obj, pr_opened
 
 
 def sample_records():
