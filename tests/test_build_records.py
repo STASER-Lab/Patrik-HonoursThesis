@@ -4,7 +4,8 @@ import gzip
 import json
 
 from ingest.transform.build_records import main, run
-from tests.test_transform import comment_on_pr, pr_opened
+
+from .test_operations import comment_on_pr, pr_opened
 
 IN_TIER, OUTSIDE = 10, 99
 

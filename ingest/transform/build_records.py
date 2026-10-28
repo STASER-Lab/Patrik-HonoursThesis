@@ -20,9 +20,9 @@ def run(files: Iterable[Path], keep: set[int] | None) -> tuple[Folder, dict]:
     screen, validate, folder = Screen(), Validator(), Folder()
     counts: Counter[str] = Counter()
     start = time.time()
-    # Step 1: yields only parsed events of the five types
+    # Operation 1: yields only parsed events of the five types
     for ev in screen(files):
-        # Step 2: tier check, before validation, and safe on broken events
+        # Operation 2: tier check, before validation, and safe on broken events
         if keep is not None:
             repo_id = (ev.get("repo") or {}).get("id")
             if repo_id is None:
@@ -31,13 +31,13 @@ def run(files: Iterable[Path], keep: set[int] | None) -> tuple[Folder, dict]:
             if repo_id not in keep:
                 counts["outside_repo_list"] += 1
                 continue
-        # Step 3: validate the event and reject malformed events
+        # Operation 3: validate the event and reject malformed events
         if not validate(ev):
             continue
-        # Step 4: fold the event into the entity records
+        # Operation 4: fold the event into the entity records
         folder.add(ev)
 
-    # Step 5: add links between issues and pull requests
+    # Operation 5: add links between issues and pull requests
     link_stats = add_links(folder)
 
     summary = {
