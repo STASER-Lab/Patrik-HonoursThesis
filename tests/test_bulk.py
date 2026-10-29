@@ -65,7 +65,21 @@ def test_bulk_file_format_and_ids(records_dir, tmp_path):
     assert s["entities"]["pull_request"]["docs"] == 2
 
 
-# Batch test TBC
+def test_load_batches_split_by_document_count(tmp_path):
+    from ingest.load.index import batches
+    
+    p = tmp_path / "x.ndjson"
+    p.write_text(
+        "".join(
+            json.dumps({"index": {"_id": str(i)}})
+            + "\n" 
+            + json.dumps({"n": i}) 
+            + "\n"
+            for i in range(5)
+        )
+    )
+    sizes = [len(ops) // 2 for ops, _ in batches(p, 2)]
+    assert sizes == [2, 2, 1]
 
 
 def test_s2_link_carries_both_parents(records_dir):
