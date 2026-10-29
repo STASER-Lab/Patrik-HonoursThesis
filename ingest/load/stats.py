@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .mappings import STRATEGIES, index_definitions
@@ -16,11 +16,9 @@ def store_stats(es, indexes: list[str]) -> dict[str, dict]:
     out = {}
     for name in indexes:
         prim = s["indices"][name]["primaries"]
-        out[name] = {
-            "store_mb": round(prim["store"]["size_in_bytes"] / 1e6, 1),
-            "segments": prim["segments"]["count"],
-            "lucene_docs": prim["docs"]["count"],
-        }
+        out[name] = {"store_mb": round(prim["store"]["size_in_bytes"] / 1e6, 1),
+                     "segments": prim["segments"]["count"],
+                     "lucene_docs": prim["docs"]["count"]}
     return out
 
 
@@ -29,8 +27,7 @@ def measure(es, indexes: list[str], force_merge: bool = True) -> dict[str, dict]
     if not force_merge:
         return {n: {"as_loaded": before[n]} for n in indexes}
     es.options(request_timeout=3600).indices.forcemerge(
-        index=",".join(indexes), max_num_segments=1, wait_for_completion=True
-    )
+        index=",".join(indexes), max_num_segments=1, wait_for_completion=True)
     es.indices.refresh(index=",".join(indexes))
     after = store_stats(es, indexes)
     return {n: {"as_loaded": before[n], "merged": after[n]} for n in indexes}
@@ -45,15 +42,11 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     from .connect import client
-
     es = client(args.env_file)
-    report = {
-        "tier": args.tier,
-        "elasticsearch": es.info()["version"]["number"],
-        "measured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "strategies": {},
-    }
-    for s in STRATEGIES if args.strategy == "all" else (args.strategy,):
+    report = {"tier": args.tier, "elasticsearch": es.info()["version"]["number"],
+              "measured_at": datetime.now(UTC).isoformat(timespec="seconds"), 
+              "strategies": {}}
+    for s in (STRATEGIES if args.strategy == "all" else (args.strategy,)):
         names = list(index_definitions(s, args.tier))
         m = measure(es, names, force_merge=not args.no_force_merge)
         key = "as_loaded" if args.no_force_merge else "merged"
@@ -61,7 +54,9 @@ def main(argv: list[str] | None = None) -> int:
         report["strategies"][s] = {"indexes": m, f"total_store_mb_{key}": total}
         print(f"{s}: {total:>8} MB ({key})")
         for n, v in m.items():
-            line = f"   {n:24} loaded {v['as_loaded']['store_mb']:>7} MB / {v['as_loaded']['segments']:>3} seg"
+            line = f"   {n:24} loaded "
+            f"{v['as_loaded']['store_mb']:>7} MB / "
+            f"{v['as_loaded']['segments']:>3} seg"
             if "merged" in v:
                 line += f"  ->  merged {v['merged']['store_mb']:>7} MB"
             print(line)
