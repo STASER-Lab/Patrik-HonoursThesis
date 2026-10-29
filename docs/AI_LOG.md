@@ -14,4 +14,6 @@ Tracks AI assistance, for transparency in the research project
 
 | 2026-10-26 | Claude | Transform layer | Refactored transform steps to match standard ETL flow, editing tests and names, added linking between issues and pull requests |
 
-| 2026-10-27 | ChatGPT | Foratting advice and indexing logic | Used ruff to lint files and removed redundant steps in `entity_mappings()` |
+| 2026-10-27 | ChatGPT | Formatting advice and indexing logic | Used ruff to lint files and removed redundant steps in `entity_mappings()` |
+
+| 2026-10-29 | Claude | Profiler output and storage measurement | Documentation updates |
