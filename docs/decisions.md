@@ -14,7 +14,7 @@
 
 ## D-002 Pin Elasticsearch 9.5.5
 
-**Status** - Active. Need to pin the version in the ECK YAML and upgrade the current version
+**Status** - *Active*. Need to pin the version in the ECK YAML and upgrade the current version
 
 **Proposed** - Use the same Elasticsearch version across the research project
 
@@ -87,6 +87,20 @@
 **Decision** - Go with the buckets approach for now
 
 **Consequences** - Every issue, PR, comment and review belongs to exactly one repository, so buckets never need each other, and memory is bounded by bucket size
+
+--
+
+## D-008 Storage measured after force-merge to one segment
+
+**Status** - Closed
+
+**Proposed** - Measure index size after force merge for storage only
+
+**Context** - When indexing ES has segments merging in the background
+
+**Decision** - Go with the proposed plan and also measure as-loaded size size alongside it
+
+**Consequences** - Deterministic size on each run. Not relying on timing
 
 --
 
