@@ -1,0 +1,10 @@
+# Ruby packages needed to build the docs site
+source "https://rubygems.org"
+
+gem "jekyll", "~> 4.4.1"
+gem "just-the-docs", "0.12.0"
+
+group :jekyll_plugins do
+  gem "jekyll-optional-front-matter"
+  gem "jekyll-relative-links"
+end

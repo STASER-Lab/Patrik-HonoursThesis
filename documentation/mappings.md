@@ -1,6 +1,6 @@
 # Index layouts for S1 to S4
 
-All four strategies are built from the same records (`docs/record-model.md`). They differ only
+All four strategies are built from the same records (`documentation/record-model.md`). They differ only
 in document shape. Index names: `<strategy>-<tier>-<entity>`, e.g. `s1-10gb-pull_request`.
 
 ## Field types

@@ -25,3 +25,9 @@ __pycache__/
 # macOS, editor
 .DS_Store
 .vscode/
+
+# Documentation
+documentation/_site/
+documentation/.jekyll-cache/
+documentation/.bundle/
+documentation/vendor/

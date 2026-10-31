@@ -1,0 +1,36 @@
+# Settings for the Just the Docs documentation site
+
+title: Patrik Hons STASER Lab
+description: Replication package for my honours thesis
+theme: just-the-docs
+color_scheme: staser
+
+logo: "/STASER_logo.png"
+search_enabled: true
+
+aux_links:
+  "GitHub repository": "https://github.com/STASER-Lab/Patrik-HonoursThesis"
+aux_links_new_tab: true
+
+plugins:
+  - jekyll-optional-front-matter
+  - jekyll-relative-links
+
+relative_links:
+  enabled: true
+
+defaults:
+  - scope: { path: "record-model.md" }
+    values: { title: "Record model", nav_order: 2 }
+  - scope: { path: "mappings.md" }
+    values: { title: "Index layouts (S1 to S4)", nav_order: 3 }
+  - scope: { path: "data-profile-2024.md" }
+    values: { title: "Data profile (2024)", nav_order: 4 }
+  - scope: { path: "decisions.md" }
+    values: { title: "Decision records", nav_order: 5 }
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - .bundle/
