@@ -18,4 +18,3 @@ folder of the repository. Edit those files and the site updates automatically.
 - [Index layouts (S1 to S4)](mappings.md): how each strategy shapes its documents
 - [GH Archive 2024 data profile](data-profile-2024.md): the source data
 - [Decision records](decisions.md): design decisions and their status
-- [AI log](AI_LOG.md): AI assistance used in this project
