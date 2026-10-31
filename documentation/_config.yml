@@ -20,6 +20,8 @@ relative_links:
   enabled: true
 
 defaults:
+  - scope: { path: "" }
+    values: { layout: "default" }
   - scope: { path: "record-model.md" }
     values: { title: "Record model", nav_order: 2 }
   - scope: { path: "mappings.md" }
@@ -34,3 +36,4 @@ exclude:
   - Gemfile.lock
   - vendor/
   - .bundle/
+  - AI_LOG.md
