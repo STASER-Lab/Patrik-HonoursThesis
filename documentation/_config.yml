@@ -1,7 +1,5 @@
-# Settings for the Just the Docs documentation site
-
-title: Patrik Hons STASER Lab
-description: Replication package for my honours thesis
+title: Documentation
+description: Evaluating Elasticsearch storage architectures for open source repository activity at scale
 theme: just-the-docs
 color_scheme: staser
 
@@ -22,14 +20,33 @@ relative_links:
 defaults:
   - scope: { path: "" }
     values: { layout: "default" }
-  - scope: { path: "record-model.md" }
-    values: { title: "Record model", nav_order: 2 }
-  - scope: { path: "mappings.md" }
-    values: { title: "Index layouts (S1 to S4)", nav_order: 3 }
-  - scope: { path: "data-profile-2024.md" }
-    values: { title: "Data profile (2024)", nav_order: 4 }
-  - scope: { path: "decisions.md" }
-    values: { title: "Decision records", nav_order: 5 }
+  - scope: { path: "requirements.md" }
+    values: { title: "Requirements", nav_order: 2 }
+  - scope: { path: "design.md" }
+    values: { title: "Design (TBC)", nav_order: 3 }
+  # TBC: Finish writing the following documentation
+  #- scope: { path: "pipeline/extract.md" }
+  #  values: { title: "Extract", parent: "Design", nav_order: 1 }
+  #- scope: { path: "pipeline/transform.md" }
+  #  values: { title: "Transform", parent: "Design", nav_order: 2 }
+  #- scope: { path: "pipeline/load.md" }
+  #  values: { title: "Load", parent: "Design", nav_order: 3 }
+  #- scope: { path: "pipeline/model.md" }
+  #  values: { title: "Model", parent: "Design", nav_order: 4 }
+  #- scope: { path: "pipeline/test.md" }
+  #  values: { title: "Test", parent: "Design", nav_order: 5 }
+  - scope: { path: "about.md" }
+    values: { title: "About", nav_order: 6 }
+  - scope: { path: "references.md" }
+    values: { title: "References", nav_order: 7 }
+
+callouts:
+  note:
+    title: Note
+    color: blue
+  warning:
+    title: Warning
+    color: red
 
 exclude:
   - Gemfile
@@ -37,3 +54,12 @@ exclude:
   - vendor/
   - .bundle/
   - AI_LOG.md
+  - decisions.md
+  - data-profile-2024.md
+  - record-model.md
+  - mappings.md
+  - pipeline/extract.md
+  - pipeline/transform.md
+  - pipeline/load.md
+  - pipeline/model.md
+  - pipeline/test.md

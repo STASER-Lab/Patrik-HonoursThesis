@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "Patrik-HonoursThesis"
 version = "1.0"
-description = "scalable-elasticsearch-infrastructure-for-software-repository-data"
-requires-python = ">=3.10"
-dependencies = []
+description = "evaluating-elasticsearch-storage-architectures-for-open-source-repository-activity-at-scale"
+requires-python = ">=3.14"
+dependencies = ["elasticsearch>=9,<10"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

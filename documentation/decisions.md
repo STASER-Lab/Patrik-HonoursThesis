@@ -66,13 +66,13 @@
 
 **Status** - Closed
 
-**Proposed** - Use a curated bot list for observation, children copy non-test fields only and S4 has its own index set, with parent indexes (`pull_request`, `issue`, `person`) in `index.mode: lookup`
+**Proposed** - Use a curated bot list for observation, children copy non-test fields only and S4 has its own index set, with `pull_request`, `issue`, `person` and `link` in `index.mode: lookup`
 
 **Context** - Define these choice before mappings are coded in
 
 **Decision** - Go ahead with the proposed decisions
 
-**Consequences** - Reduce text dupilication, easier to load and drop strategies and information on bot activity
+**Consequences** - Reduce text dupilication, easier to load and drop strategies and information on bot activity. Update: `link` added as a lookup index, since `LOOKUP JOIN` can only join into lookup indexes and issue-to-PR queries need it
 
 --
 

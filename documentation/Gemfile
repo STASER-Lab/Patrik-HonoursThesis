@@ -1,4 +1,3 @@
-# Ruby packages needed to build the docs site
 source "https://rubygems.org"
 
 gem "jekyll", "~> 4.4.1"

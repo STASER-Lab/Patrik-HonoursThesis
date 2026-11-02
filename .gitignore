@@ -31,3 +31,9 @@ documentation/_site/
 documentation/.jekyll-cache/
 documentation/.bundle/
 documentation/vendor/
+documentation/Gemfile.lock
+
+# Planned
+documentation/pipeline/
+documentation/model.md
+documentation/test.md

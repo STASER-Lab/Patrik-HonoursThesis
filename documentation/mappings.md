@@ -36,8 +36,9 @@ default 10,000).
 
 ## S4: ES|QL LOOKUP JOIN
 
-S1's indexes, with the parent indexes (`pull_request`, `issue`, `person`) created in
-`index.mode: lookup`.
+S1's indexes, with `pull_request`, `issue`, `person` and `link` created in
+`index.mode: lookup`. `LOOKUP JOIN` can only join into a lookup index, so `link` must be one
+for queries that start from an issue and follow its links to pull requests (see Links below).
 
 ## Links
 
