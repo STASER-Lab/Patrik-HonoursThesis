@@ -1,7 +1,7 @@
 # Architecture
 
 The project has two parts. First, a pipeline turns raw GitHub activity into
-Elasticsearch indexes, and a cluster that stores and serves them during
+Elasticsearch indexes. Then a cluster stores and serves them during
 experiments.
 
 ## The pipeline
