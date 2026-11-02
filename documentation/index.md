@@ -17,7 +17,7 @@ With so much at stake, researchers in Mining Software Repositories and initiativ
 
 The first step in that research is collecting the data, whether through APIs, existing datasets or by hand. That alone is a challenge. Once you have it, another question follows: how should you store it? The answer affects query speed, processing time, maintenance effort and hardware costs.
 
-Now, imagine you want to open a new library. Suppose you already have a source supplying you with thousands of books, but you need a way to organise them, and there's no guide for a library quite like this one. Do you sort them onto shelves, group them by genre, securely lock some away, or remove any damaged ones first? If people are going to find anything, the design matters. However, before that, you need a suitable building.
+Now, imagine you want to open a new library. Suppose you already have a source providing you with thousands of books, but you need a way to organise them, and there’s no existing guide for a library quite like yours. Do you sort them onto shelves, group them by genre, securely lock some away, or remove any damaged ones first? If people are going to find anything, the design matters. However, before that, you need a suitable building.
 
 Elasticsearch (ES) fits the bill for text-based activity data (issues, pull requests, comments and reviews). It's a distributed search and analytics engine that returns results fast, scales horizontally as data grows, and comes with tools for indexing, lifecycle management and visualisation.
 
