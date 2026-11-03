@@ -4,13 +4,13 @@ The project has two parts. First, a pipeline turns raw GitHub activity into
 Elasticsearch indexes. Then a cluster stores and serves them during
 experiments.
 
-## The pipeline
+## The ingestion process
 
 The pipeline follows the Medallion Architecture where data moves through three layers increasing in quality (bronze, silver, and gold). Every layer is written to disk, so each stage can be rerun or inspected on its own. Continue reading to follow the data flow from end to end:
 
 <img alt="Medallion Architecture" src="Medallion_Architecture.png?raw=true" width="800">
 
-Three rules hold across the pipeline:
+Three rules hold across the ingestion process:
 
 1. One source of truth. All four layouts are built from the same Silver
    records, so differences in results come from the layout, not the data.
