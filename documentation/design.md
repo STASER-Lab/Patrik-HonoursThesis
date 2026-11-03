@@ -39,7 +39,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-### Run the whole pipeline
+### Run the ingestion process
 
 Every command runs from the repository root. This example uses one day of data
 and the `dev` tier.
@@ -60,7 +60,7 @@ python -m ingest.load.stats          --strategy s1 --tier dev --env-file elastic
 
 ## The cluster (Planned)
 
-The experiment cluster is rebuilt from files in this repository, in four layers:
+The experiment cluster is rebuilt from files in this repository, in four steps:
 
 | Layer | Tool | Job |
 |---|---|---|
