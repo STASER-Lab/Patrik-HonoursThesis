@@ -13,7 +13,7 @@ Evaluating Elasticsearch storage architectures for open source repository activi
 
 In 2024, a Harvard Business School study estimated the value of widely used open source software (OSS) at $8.8 trillion. OSS sits inside virtually every modern codebase, and when it fails, everything built on it is at risk. In fact, the 2024 XZ Utils backdoor showed how close that came to happening.
 
-With so much at stake, researchers in Mining Software Repositories and initiatives such as CHAOSS (Community Health Analytics in Open Source Software) analyse large volumes of OSS activity data from platforms like GitHub. Their findings help maintainers grow stronger communities and help the companies and funders that rely on OSS understand where support is needed most.
+With so much at stake, researchers in MSR and initiatives such as CHAOSS analyse large volumes of OSS activity data from platforms like GitHub. Their findings help maintainers grow stronger communities and help the companies and funders that rely on OSS understand where support is needed most.
 
 The first step in this research is collecting data, whether through APIs, existing datasets, or manual collection. That alone is a challenge. Once you have it, another question follows: how should you store it? The answer affects query speed, processing time, maintenance effort, and hardware costs.
 
