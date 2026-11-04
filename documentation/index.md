@@ -21,6 +21,6 @@ Now, imagine you want to open a new library. Suppose you already have a source t
 
 Elasticsearch (ES) fits the bill for text-based activity data (issues, pull requests, comments, and reviews). It's a distributed search and analytics engine that returns results fast, scales horizontally as data grows, and comes with tools for indexing, lifecycle management, and visualisation. So, we have Elasticsearch. But simply having a place to store our data doesn't mean we've figured out how best to organise it.
 
-This honours thesis studies exactly that. Using public GitHub activity from GH Archive, it stores the same data in several layouts and configurations, then compares them on storage, loading speed, query speed, and computing resources.
+That's where this honours thesis comes in. Using public GitHub activity from GH Archive, it stores the same data in several layouts and configurations, then compares them on storage, loading speed, query speed, and computing resources.
 
 The expected outcome is an evidence-based set of recommendations. No single design suits every need, but these recommendations aim to clarify the trade-offs and help guide design decisions.
