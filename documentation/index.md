@@ -19,9 +19,7 @@ The first step in this research is collecting data, whether through APIs, existi
 
 Now, imagine you want to open a new library. Suppose you already have a source that provides thousands of books, but you need a way to organise them, and there's no existing guide for a library quite like yours. Do you sort them onto shelves, group them by genre, securely lock some away, or remove damaged ones first? If people are going to find anything, the design matters. However, before that, you need a suitable building.
 
-Elasticsearch (ES) fits the bill for text-based activity data (issues, pull requests, comments, and reviews). It's a distributed search and analytics engine that returns results fast, scales horizontally as data grows, and comes with tools for indexing, lifecycle management, and visualisation.
-
-Great, so we have ES, but should we just store the data as-is? Technically, we could, but that would be like leaving all the books boxed up inside the front door. What we need is a floor plan, and every layout comes with its own cost.
+Elasticsearch (ES) fits the bill for text-based activity data (issues, pull requests, comments, and reviews). It's a distributed search and analytics engine that returns results fast, scales horizontally as data grows, and comes with tools for indexing, lifecycle management, and visualisation. So, we have Elasticsearch. But simply having a place to store our data doesn't mean we've figured out how best to organise it.
 
 This honours thesis studies exactly that. Using public GitHub activity from GH Archive, it stores the same data in several layouts and configurations, then compares them on storage, loading speed, query speed, and computing resources.
 
