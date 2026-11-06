@@ -147,9 +147,7 @@ class Stats:
                 self.present[t][field] += 1
                 if v is not None:
                     self.non_null[t][field] += 1
-        if str(get_path(ev, "actor.login")).endswith(
-            "[bot]"
-        ):
+        if str(get_path(ev, "actor.login")).endswith("[bot]"):
             self.bot_login[t] += 1
         if t == "IssueCommentEvent" and get_path(
             ev, "payload.issue.pull_request"

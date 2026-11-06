@@ -107,9 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     for r in results:
         prim = stats["indices"][r["index"]]["primaries"]
         r["store_mb"] = round(prim["store"]["size_in_bytes"] / 1e6, 1)
-        r["docs_counted"] = prim["docs"][
-            "count"
-        ]
+        r["docs_counted"] = prim["docs"]["count"]
 
     out = {
         "strategy": args.strategy,

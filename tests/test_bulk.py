@@ -67,14 +67,11 @@ def test_bulk_file_format_and_ids(records_dir, tmp_path):
 
 def test_load_batches_split_by_document_count(tmp_path):
     from ingest.load.index import batches
-    
+
     p = tmp_path / "x.ndjson"
     p.write_text(
         "".join(
-            json.dumps({"index": {"_id": str(i)}})
-            + "\n" 
-            + json.dumps({"n": i}) 
-            + "\n"
+            json.dumps({"index": {"_id": str(i)}}) + "\n" + json.dumps({"n": i}) + "\n"
             for i in range(5)
         )
     )
@@ -92,7 +89,7 @@ def test_s2_link_carries_both_parents(records_dir):
 
 def test_s3_pr_holds_its_links(records_dir):
     docs = {(e, i): d for e, i, d in documents("s3", records_dir)}
-    assert [
-        link["issue_key"] for link in docs[("pull_request", "10/9")]["links"]
-    ] == ["10/6"]
+    assert [link["issue_key"] for link in docs[("pull_request", "10/9")]["links"]] == [
+        "10/6"
+    ]
     assert docs[("pull_request", "10/5")]["links"] == []
