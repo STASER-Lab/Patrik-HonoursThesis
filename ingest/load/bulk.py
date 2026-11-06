@@ -36,8 +36,11 @@ def _copy_parent(child: dict, parent: dict) -> dict:
 
 def _copy_link_parents(link: dict, pr: dict, issue: dict | None) -> dict:
     issue = issue or {}
-    return (link | {f"pr_{k}": pr.get(k) for k in S2_LINK_COPIED["pr"]}
-                 | {f"issue_{k}": issue.get(k) for k in S2_LINK_COPIED["issue"]})
+    return (
+        link
+        | {f"pr_{k}": pr.get(k) for k in S2_LINK_COPIED["pr"]}
+        | {f"issue_{k}": issue.get(k) for k in S2_LINK_COPIED["issue"]}
+    )
 
 
 def documents(strategy: str, records_dir: Path) -> Iterator[tuple[str, str, dict]]:
