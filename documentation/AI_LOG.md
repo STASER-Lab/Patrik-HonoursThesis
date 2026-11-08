@@ -20,4 +20,4 @@ Tracks AI assistance, for transparency in the research project
 
 | 2026-11-01 | Lucidchart | Diagram generation | Edit naming and style |
 
-| 2026-11-07 | Claude | Query implementation and bucketing in Python | Logic checks and query structure |
+| 2026-11-07 | Claude | Query implementation, tier selection, and bucketing in Python | Logic checks and query structure |
