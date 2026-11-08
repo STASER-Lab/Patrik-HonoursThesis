@@ -11,7 +11,7 @@ Status labels. *Working* means the code is in this repository and tested.
 | Layer | Technology | Version | Status |
 |---|---|---|---|
 | Language | Python | 3.14+ | Working |
-| Search engine | Elasticsearch | 9.5.5 (pinned) | Working |
+| Search engine | Elasticsearch | 9.5.4 (pinned) | Working |
 | Elasticsearch client | [`elasticsearch`](https://pypi.org/project/elasticsearch/) (official Python client) | matches server | Working |
 | Data source | [GH Archive](https://www.gharchive.org/) hourly event files | 2024/2025 | Working |
 | Orchestration | [k3s](https://k3s.io/) (Kubernetes) and [Elastic Cloud on Kubernetes](https://www.elastic.co/docs/deploy-manage/deploy/cloud-on-k8s) (ECK) | | Planned |
