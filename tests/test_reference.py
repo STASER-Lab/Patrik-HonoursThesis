@@ -1,6 +1,6 @@
 """The Python reference answers are the yardstick, so they get their own tests."""
 
-from benchmark.queries import activity, q1, q2, q4, q5
+from benchmark.queries import activity, q0, q1, q2, q3, q4, q5, q6
 
 PR = dict(
     repo_id=10, author_id=1, author_is_bot=False, created_at="2024-01-10T10:00:00Z"
@@ -15,7 +15,24 @@ class FakeData:
         return [r for r in self.entities.get(entity, []) if r["repo_id"] == repo_id]
 
 
-# TODO: q0 needs a test
+def test_q0_counts_issues_and_prs_per_month_in_window():
+    d = FakeData(
+        issue=[
+            {"repo_id": 10, "created_at": "2024-01-05T00:00:00Z"},
+            {"repo_id": 10, "created_at": "2024-01-20T00:00:00Z"},
+            {"repo_id": 10, "created_at": "2023-12-31T23:59:59Z"},
+            {"repo_id": 11, "created_at": "2024-01-05T00:00:00Z"},
+        ],
+        pull_request=[
+            {"repo_id": 10, "created_at": "2024-01-31T23:59:59Z"},
+            {"repo_id": 10, "created_at": "2024-03-01T00:00:00Z"},
+            {"repo_id": 10, "created_at": "2025-06-01T00:00:00Z"},
+        ],
+    )
+    assert q0.reference(d, 10) == {
+        "2024-01": {"issues": 2, "prs": 1},
+        "2024-03": {"issues": 0, "prs": 1},
+    }
 
 
 def test_q1_first_response_rules():
@@ -117,7 +134,7 @@ def test_activity_ignores_bots_and_outside_window():
     assert activity.reference(d, 10) == {1: [1704067200]}
 
 
-""" def test_q3_labels_first_time_by_earlier_activity():
+def test_q3_labels_first_time_by_earlier_activity():
     d = FakeData(
         pull_request=[
             {
@@ -160,12 +177,11 @@ def test_activity_ignores_bots_and_outside_window():
             },
         ],
     )
-    # TODO: failing test, maximum recursion depth exceeded in comparison
-    # assert q3.reference(d, 10) == {
-    #    "first_time": {"prs": 1, "answered": 1, "median_seconds": 600},
-    #    "regular": {"prs": 1, "answered": 1, "median_seconds": 3600},
-    #} 
-    """
+    assert q3.reference(d, 10) == {
+        "first_time": {"prs": 1, "answered": 1, "median_seconds": 600},
+        "regular": {"prs": 1, "answered": 1, "median_seconds": 3600},
+    }
+
 
 def test_q4_cohorts_and_90_day_return():
     def c(person, at):
@@ -245,4 +261,30 @@ def test_q5_issue_closed_via_merged_pr():
     }
 
 
-# TODO: q6 needs a test
+def test_q6_merged_prs_that_close_an_issue():
+    merged = "2024-02-01T00:00:00Z"
+    d = FakeData(
+        pull_request=[
+            {"repo_id": 10, "pr_key": "10/1", "merged_at": merged},
+            {"repo_id": 10, "pr_key": "10/2", "merged_at": merged},
+            {"repo_id": 10, "pr_key": "10/3", "merged_at": merged},
+            {"repo_id": 10, "pr_key": "10/4", "merged_at": "2023-12-01T00:00:00Z"},
+            {"repo_id": 10, "pr_key": "10/5", "merged_at": None},
+            {"repo_id": 10, "pr_key": "10/6", "merged_at": merged},
+            {"repo_id": 10, "pr_key": "10/7", "merged_at": merged},
+        ],
+        link=[
+            {"repo_id": 10, "pr_key": "10/1", "target_type": "issue"},
+            {"repo_id": 10, "pr_key": "10/2", "target_type": "pr"},
+            {"repo_id": 10, "pr_key": "10/3", "target_type": "unknown"},
+            {"repo_id": 10, "pr_key": "10/4", "target_type": "issue"},
+            {"repo_id": 10, "pr_key": "10/5", "target_type": "issue"},
+            {"repo_id": 10, "pr_key": "10/6", "target_type": "issue"},
+            {"repo_id": 10, "pr_key": "10/6", "target_type": "issue"},
+        ],
+    )
+    assert q6.reference(d, 10) == {"merged": 5, "closing": 2, "share": 0.4}
+
+
+def test_q6_no_merged_prs():
+    assert q6.reference(FakeData(), 10) == {"merged": 0, "closing": 0, "share": None}

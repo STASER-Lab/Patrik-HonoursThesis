@@ -60,10 +60,9 @@ def test_tier_check_runs_before_validation(tmp_path):
 
 def test_without_a_repo_list_everything_is_validated(tmp_path):
     _, s = run(sample(tmp_path), keep=None)
-    # both broken events and the repo-less one are now rejections; nothing is "outside"
     assert s["events_outside_repo_list"] == 0 and s["events_no_repo_id"] == 0
     assert s["events_rejected"] == {"empty payload": 2, "missing repo.id": 1}
-    assert s["events_accepted"] == 3  # includes the other repo's valid PR
+    assert s["events_accepted"] == 3    # includes the other repo's valid PR
 
 
 def test_main_writes_records_and_summary(tmp_path):
@@ -77,6 +76,8 @@ def test_main_writes_records_and_summary(tmp_path):
     )
     summary = json.loads((out / "summary.json").read_text())
     assert summary["repo_list"].endswith("tier.txt") and summary["events_accepted"] == 2
+    authored = summary["authored_records"]
+    assert authored["total"] >= authored["bot"] >= 0
     prs = [
         json.loads(ln) for ln in (out / "pull_request.ndjson").read_text().splitlines()
     ]

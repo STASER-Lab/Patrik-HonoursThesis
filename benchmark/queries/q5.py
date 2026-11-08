@@ -1,4 +1,4 @@
-"""Q6: share of issues closed in the window that a merged PR's closing keyword targets, 
+"""Q5: share of issues closed in the window that a merged PR's closing keyword targets,
 and the median time from issue opened to the first such merge"""
 
 from __future__ import annotations
@@ -54,6 +54,10 @@ def reference(data, repo_id: int) -> dict:
         ):
             _min_into(first, ln["issue_key"], merged[ln["pr_key"]])
     return _answer(closed, first)
+
+
+def informative(answer: dict) -> bool:
+    return answer["via_pr"] > 0
 
 
 def _closed_issues(es, strategy, tier, repo_id):

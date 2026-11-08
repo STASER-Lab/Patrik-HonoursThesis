@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+from .bots import is_bot_account
 from .validate import get
+
+__all__ = ["ENTITIES", "Folder", "is_bot_account", "key"]
 
 ENTITIES = (
     "repository",
@@ -17,72 +20,11 @@ ENTITIES = (
     "link",
 )
 
-CURATED_BOT_LOGINS: frozenset[str] = frozenset(
-    {
-        # Dependencies
-        "dependabot",
-        "dependabot-preview",
-        "renovate",
-        "renovate-bot",
-        "pyup-bot",
-        "greenkeeper",
-        # CI
-        "travis",
-        "travis-ci",
-        "circleci",
-        "appveyor",
-        "azure-pipelines",
-        "buildkite-bot",
-        "drone-io",
-        "jenkins-bot",
-        # Code
-        "codecov",
-        "codecov-io",
-        "sonarcloud",
-        "snyk-bot",
-        "whitesource-bolt-for-github",
-        "deepsource-autofix",
-        "github-advanced-security",
-        # Release
-        "semantic-release-bot",
-        "release-drafter",
-        "changeset-bot",
-        "github-actions",
-        # Documentation, maintenance
-        "allcontributors",
-        "all-contributors",
-        "backportbot",
-        "bors",
-        "homu",
-        "probot",
-        "stale",
-        "mergify",
-        "kodiakhq",
-        # Other
-        "everypoliticianbot",
-        "depfu",
-        "scala-steward",
-        "imgbot",
-        "docker-library-bot",
-        "siteleaf",
-        "yoshi-automation",
-        "yoshi-code-bot",
-    }
-)
-
 Version = tuple[int, int]  # (event created_at, event id)
 
 
 def key(repo_id: int, number: int) -> str:
     return f"{repo_id}/{number}"
-
-
-def is_bot_account(user: dict) -> bool:
-    login = str(user.get("login") or "").strip().casefold()
-    account_type = str(user.get("type") or "").strip().casefold()
-    return (
-        account_type == "bot" or login.endswith("[bot]") or login in CURATED_BOT_LOGINS
-    )
 
 
 class Folder:

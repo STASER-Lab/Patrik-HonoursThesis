@@ -20,7 +20,7 @@
 
 **Context** - Want local and Arbutus development results to agree. Currently 9.5.4 (arm64) is installed
 
-**Decision** - Use Elasticsearch version 9.5.5
+**Decision** - Use Elasticsearch version 9.5.4
 
 **Consequences** - Consistent results across local and Arbutus. Also, helps reproducibility
 
@@ -101,6 +101,48 @@
 **Decision** - Go with the proposed plan and also measure as-loaded size size alongside it
 
 **Consequences** - Deterministic size on each run. Not relying on timing
+
+--
+
+## D-009 Bot detection by name rule and reviewed lists
+
+**Status** - Closed
+
+**Proposed** - Add a login-suffix rule ("bot", including "robot"), an exception list for people whose login ends in "bot", and a small curated list of accounts that name themselves as automation or post templated output. The lists are fixed for the whole study
+
+**Context** - GitHub only marks GitHub Apps. User-type bots passed as humans
+
+**Decision** - Go with the proposed rule, in `ingest/transform/bots.py`
+
+**Consequences** - The lists are not re-reviewed per tier, so every tier uses the same rule. Each tier's share of bot-authored records is reported from the ETL summary (`authored_records.bot_share`). Bots posting through a person's own account (status pages, mirrors) are still missed and are reported as a threat to validity
+
+--
+
+## D-010 ES|QL row limit is a capability result
+
+**Status** - Closed
+
+**Proposed** - Keep the default ES|QL row limit (10,000) and record S4 answers that reach it as `limit` (Not supported) instead of raising the cluster setting or paging
+
+**Context** - S4's Q1, Q3 and Q5 return one row per PR or issue, so they can reach the limit on the largest repositories. Raising `esql.query.result_truncation_max_size` is a non-default configuration, and paging makes S4 a workaround
+
+**Decision** - Go with the proposed plan
+
+**Consequences** - `check.py` reports pass, fail and limit separately, and only failures fail the run. The limit is reported as an RQ1 finding
+
+--
+
+## D-011 Fixed benchmark repositories per tier
+
+**Status** - Closed
+
+**Proposed** - Pick small, median and largest from repositories where every query has data, ranked by size, and save the picks per tier
+
+**Context** - Picking by PR comment count from the sample chose repositories with about one PR, so Q4 to Q6 had nothing to answer
+
+**Decision** - Go with the proposed plan (`benchmark/repos/<tier>.json`, re-pick with `--repick`)
+
+**Consequences** - Every query's strategies are exercised on every pick, and runs are repeatable. The small pick is the smallest repository with data for every query, not the smallest overall
 
 --
 

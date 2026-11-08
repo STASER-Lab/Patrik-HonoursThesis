@@ -73,11 +73,24 @@ def composite_all(
             return buckets, requests
 
 
+class EsqlRowLimit(RuntimeError):
+    """An ES|QL answer was cut off at the row limit, so it is not exact.
+
+    Recorded by `benchmark.check` as a capability limit (RQ1 "Not supported"),
+    not as a wrong answer.
+    """
+
+
 def esql_rows(es, query: str) -> list[dict]:
-    """Run ES|QL and return rows as dicts. Raises if the row limit was hit"""
+    """Run ES|QL and return rows as dicts.
+
+    ES|QL returns at most ESQL_LIMIT rows by default
+    (`esql.query.result_truncation_max_size`). A full page cannot be told apart
+    from a cut-off one, so reaching the limit raises EsqlRowLimit.
+    """
     resp = es.esql.query(query=query)
     cols = [c["name"] for c in resp["columns"]]
     rows = [dict(zip(cols, v, strict=True)) for v in resp["values"]]
     if len(rows) >= ESQL_LIMIT:
-        raise RuntimeError(f"ES|QL returned {len(rows)} rows, the LIMIT was hit")
+        raise EsqlRowLimit(f"ES|QL returned {len(rows)} rows, the row limit was hit")
     return rows

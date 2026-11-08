@@ -40,6 +40,13 @@ def run(files: Iterable[Path], keep: set[int] | None) -> tuple[Folder, dict]:
     # Operation 5: add links between issues and pull requests
     link_stats = add_links(folder)
 
+    authored = [
+        r["author_is_bot"]
+        for entity in ("issue", "pull_request", "comment", "review")
+        for r in folder.iter_records(entity)
+    ]
+    bots = sum(authored)
+
     summary = {
         "seconds": round(time.time() - start, 1),
         "events_unparseable": screen.counts["unparseable"],
@@ -50,6 +57,11 @@ def run(files: Iterable[Path], keep: set[int] | None) -> tuple[Folder, dict]:
         "events_accepted": validate.accepted,
         "records": folder.counts(),
         "links": link_stats,
+        "authored_records": {
+            "total": len(authored),
+            "bot": bots,
+            "bot_share": round(bots / len(authored), 4) if authored else None,
+        },
     }
     return folder, summary
 

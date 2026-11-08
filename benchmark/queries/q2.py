@@ -38,6 +38,10 @@ def reference(data, repo_id: int) -> dict:
     return _answer(len(prs), len(reviewed))
 
 
+def informative(answer: dict) -> bool:
+    return answer["merged"] > 0 and answer["reviewed"] > 0
+
+
 def _merged_filter(repo_id):
     return {
         "bool": {

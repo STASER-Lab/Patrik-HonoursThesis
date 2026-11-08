@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import statistics
 
-from . import activity, q3
+from . import activity, q1
 from .common import WINDOW_END, WINDOW_START, esql_rows, idx, in_window, search_all
 
 
@@ -35,15 +35,19 @@ def reference(data, repo_id: int) -> dict:
         if in_window(p["created_at"]) and not p["author_is_bot"]
     }
     return _group(
-        _labels(prs, activity.reference(data, repo_id)), q3.reference(data, repo_id)
+        _labels(prs, activity.reference(data, repo_id)), q1.reference(data, repo_id)
     )
+
+
+def informative(answer: dict) -> bool:
+    return all(g["answered"] > 0 for g in answer.values())
 
 
 def _pr_meta(es, strategy, tier, repo_id):
     hits, n = search_all(
         es,
         idx(strategy, tier, "pull_request"),
-        q3._pr_filter(repo_id),
+        q1._pr_filter(repo_id),
         ["pr_key", "author_id", "created_at"],
         "pr_key",
     )
@@ -57,7 +61,7 @@ def _pr_meta(es, strategy, tier, repo_id):
 
 
 def _flat(strategy, es, tier, repo_id):
-    ttfr, n1 = getattr(q3, strategy)(es, tier, repo_id)
+    ttfr, n1 = getattr(q1, strategy)(es, tier, repo_id)
     prs, n2 = _pr_meta(es, strategy, tier, repo_id)
     times, n3 = activity.flat_indexes(es, strategy, tier, repo_id)
     return _group(_labels(prs, times), ttfr), n1 + n2 + n3
@@ -72,14 +76,14 @@ def s2(es, tier, repo_id):
 
 
 def s3(es, tier, repo_id):
-    ttfr, n1 = q3.s3(es, tier, repo_id)
+    ttfr, n1 = q1.s3(es, tier, repo_id)
     prs, n2 = _pr_meta(es, "s3", tier, repo_id)
     times, n3 = activity.nested(es, tier, repo_id)
     return _group(_labels(prs, times), ttfr), n1 + n2 + n3
 
 
 def s4(es, tier, repo_id):
-    ttfr, n1 = q3.s4(es, tier, repo_id)
+    ttfr, n1 = q1.s4(es, tier, repo_id)
     i, p, c, r = (
         idx("s4", tier, e) for e in ("issue", "pull_request", "comment", "review")
     )

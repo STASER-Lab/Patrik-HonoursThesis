@@ -1,6 +1,6 @@
 # Record model
 
-The pipeline folds GH Archive events into entity records. Every strategy (S1 to S4) and every
+The ETL folds GH Archive events into entity records. Every strategy (S1 to S4) and every
 Python reference answer is built from these same records. Field names below are the
 contract.
 
@@ -23,7 +23,7 @@ Issues and PRs share one number sequence per repository, so `issue_key` and `pr_
 
 **repository**: `repo_id`, `name` (latest seen), `is_fork` (from PR `base.repo.fork`; `null` if the repo has no PR events)
 
-**person**: `person_id`, `login` (latest seen), `is_bot`
+**person**: `person_id`, `login` (latest seen), `is_bot` (same rule as `author_is_bot`, from the latest event)
 
 **issue**: `issue_key`, `repo_id`, `number`, `author_id`, `author_is_bot`, `title`, `body`, `state`, `created_at`, `closed_at`
 
@@ -35,7 +35,19 @@ Issues and PRs share one number sequence per repository, so `issue_key` and `pr_
 
 **link**: `link_key`, `repo_id`, `pr_key`, `issue_key` (`"{repo_id}/{number}"`), `number`, `keyword` (`close` | `fix` | `resolve`), `target_type` (`issue` | `pr` | `unknown`)
 
-`author_is_bot` is stored on every authored record. It is observed in each event (`user.type`), not derived.
+`author_is_bot` is stored on every authored record. It is set from the author as seen in that event
+(`is_bot_account` in `ingest/transform/bots.py`). Checks run in order, and the first match decides:
+
+1. Bot if GitHub reports its type as `Bot` (`user.type`) or its login ends with `[bot]` (GitHub Apps).
+2. Bot if its login is on the curated list (`CURATED_BOT_LOGINS`) or starts with a curated prefix
+   (`CURATED_BOT_PREFIXES`, e.g. `aws-aemilia-`).
+3. Human if its login is a known person whose login ends in "bot" (`KNOWN_HUMAN_LOGINS`, and logins
+   ending in `talbot`).
+4. Bot if its login ends in `bot` (this includes `robot`), the name rule of Dey et al. (MSR 2020).
+5. Otherwise human.
+
+Bots that post through a person's own account (for example status-page or mirror tools using a
+personal token) are still counted as humans.
 
 ## Folding rules
 

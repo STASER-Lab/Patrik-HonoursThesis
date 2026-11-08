@@ -1,0 +1,24 @@
+{
+  "tier": "dev",
+  "repos": {
+    "small": 29815410,
+    "median": 31625029,
+    "largest": 197275551
+  },
+  "sizes": {
+    "small": 5,
+    "median": 60,
+    "largest": 10945
+  },
+  "eligible": 1301,
+  "queries": [
+    "q0",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+    "q5",
+    "q6"
+  ],
+  "records": "data/records"
+}
