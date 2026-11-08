@@ -179,6 +179,10 @@ class Folder:
             "created_at": c["created_at"],
         }
 
+    @property
+    def versions(self) -> dict[tuple[str, Any], Version]:
+        return self._versions
+
     def iter_records(self, entity: str) -> Iterator[dict]:
         yield from self.records[entity].values()
 
