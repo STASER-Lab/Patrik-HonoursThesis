@@ -24,6 +24,10 @@ def reference(data, repo_id: int) -> dict:
     return _shape(counts)
 
 
+def informative(answer: dict) -> bool:
+    return bool(answer)
+
+
 def _dsl(es, strategy: str, tier: str, repo_id: int):
     issue_idx, pr_idx = (
         idx(strategy, tier, "issue"),

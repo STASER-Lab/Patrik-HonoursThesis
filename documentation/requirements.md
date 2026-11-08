@@ -62,8 +62,9 @@ To run the experiment
   1 January 2024. Earlier activity is not visible.
 - Transform is in-memory. All records are held in memory during one run.
   Splitting work into repository buckets is planned for the largest tier.
-- Heuristics. Bot detection uses account type, a `[bot]` suffix and a
-  curated list of known bots. Issue–pull request links come from closing
+- Heuristics. Bot detection uses account type, a `[bot]` suffix, a login
+  ending in "bot", and curated lists of known bots and of people whose login
+  ends in "bot". Bots that post through a person's own account are missed. Issue–pull request links come from closing
   keywords in pull request text (e.g. "fixes #12"), and links to other
   repositories are skipped.
 - One hardware setup. Results describe one cluster design. Different

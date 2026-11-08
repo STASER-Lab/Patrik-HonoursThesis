@@ -58,6 +58,10 @@ def reference(data, repo_id: int) -> dict:
     return _finish({k: p["created_at"] for k, p in prs.items()}, first)
 
 
+def informative(answer: dict) -> bool:
+    return any(v is not None for v in answer.values())
+
+
 def _pr_list(es, strategy, tier, repo_id):
     hits, n = search_all(
         es,

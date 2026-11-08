@@ -34,6 +34,10 @@ def reference(data, repo_id: int) -> dict:
     return _cohorts(activity.reference(data, repo_id))
 
 
+def informative(answer: dict) -> bool:
+    return bool(answer)
+
+
 def s1(es, tier, repo_id):
     times, n = activity.flat_indexes(es, "s1", tier, repo_id)
     return _cohorts(times), n
