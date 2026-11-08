@@ -11,7 +11,7 @@ Status labels. *Working* means the code is in this repository and tested.
 | Layer | Technology | Version | Status |
 |---|---|---|---|
 | Language | Python | 3.14+ | Working |
-| Search engine | Elasticsearch | 9.5.5 (pinned) | Working |
+| Search engine | Elasticsearch | 9.5.4 (pinned) | Working |
 | Elasticsearch client | [`elasticsearch`](https://pypi.org/project/elasticsearch/) (official Python client) | matches server | Working |
 | Data source | [GH Archive](https://www.gharchive.org/) hourly event files | 2024/2025 | Working |
 | Orchestration | [k3s](https://k3s.io/) (Kubernetes) and [Elastic Cloud on Kubernetes](https://www.elastic.co/docs/deploy-manage/deploy/cloud-on-k8s) (ECK) | | Planned |
@@ -50,7 +50,8 @@ To run the experiment
 - Python 3.14+ and Git
 - Internet access to `data.gharchive.org`
 - An Elasticsearch 9.x server for the Load stage, reachable by URL with an
-  API key or username and password
+  API key or username and password, plus its CA certificate (`ES_CA_CERTS`)
+  if it uses a self-signed one, as ECK does by default
 - An Arbutus (OpenStack) project with an application credential (TBD)
 - The lab's object storage bucket for snapshots (TBD)
 

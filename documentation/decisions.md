@@ -12,9 +12,9 @@
 
 **Consequences** - Easier configuration
 
-## D-002 Pin Elasticsearch 9.5.5
+## D-002 Pin Elasticsearch 9.5.4
 
-**Status** - *Active*. Need to pin the version in the ECK YAML and upgrade the current version
+**Status** - *Active*. Need to pin the version in the ECK YAML
 
 **Proposed** - Use the same Elasticsearch version across the research project
 
@@ -46,7 +46,7 @@
 
 **Decision** - Keep a repository if it has >= 3 distinct actors, no single account produces > 80% of its events**, and <= 1,000 events per actor. Forks should also be filtered. This avoids using a third party tool like GitHub Search to filter the data since we would have our own
 
-**Consequences** - 1,078,278 of 7,724,086 repositories kept (14%), with 181.7M of 283.9M events (64%). Median 26 events per repository, p99 2,188. The 1 TB tier (~67.5M events) needs about 37% of the filtered pool. A small amount of repositories are missed (i.e. bot heavy projects that are just above the event/actor line of 1000)
+**Consequences** - 1,078,278 of 7,724,086 repositories kept (14%), with 181.7M of 283.9M events (64%). Median 26 events per repository, p99 2,188. The 1 TB tier (~67.5M events) needs about 37% of the filtered pool. A small amount of repositories are missed (i.e. bot heavy projects that are just above the event/actor line of 1000). Forks cannot be seen in BigQuery without scanning the payload column (~4.2 TB, over the sandbox limit), so the ETL drops them instead (`is_fork`, from PR events) and reports the events removed (`forks_dropped`). Tiers therefore end slightly under their event targets
 
 ## D-005 Record model
 
@@ -136,13 +136,27 @@
 
 **Status** - Closed
 
-**Proposed** - Pick small, median and largest from repositories where every query has data, ranked by size, and save the picks per tier
+**Proposed** - Pick small, median and largest from repositories where every query has data, ranked by accepted events (the measure tiers are built on), and save the picks per tier
 
 **Context** - Picking by PR comment count from the sample chose repositories with about one PR, so Q4 to Q6 had nothing to answer
 
 **Decision** - Go with the proposed plan (`benchmark/repos/<tier>.json`, re-pick with `--repick`)
 
 **Consequences** - Every query's strategies are exercised on every pick, and runs are repeatable. The small pick is the smallest repository with data for every query, not the smallest overall
+
+--
+
+## D-012 Tier construction
+
+**Status** - Closed
+
+**Proposed** - Build the three tiers from the D-004 pool (`ingest/sql/tier_pool_2024.sql`) with `ingest/extract/tiers.py`: powers-of-ten size bands filled in 2024's event proportions, a fixed random order (seed 2024), a 10% cap per repository and nesting
+
+**Context** - test.md fixes the four steps but not the band edges, the order within a band, or how nesting and the cap interact
+
+**Decision** - Each tier starts from the smaller one, then fills every band until it reaches its share, so the last repository in a band may overshoot. A stricter rule (only add a repository that brings the band closer to its share) was tried and rejected: it never admits the largest repositories, because a giant always overshoots its small band
+
+**Consequences** - On a synthetic pool shaped like D-004 (1.08M repositories, median 26 events), tiers land 1-3% over their event targets with median 24-25 events, top-1% share 0.32-0.35 (pool 0.34), and a 747k-event repository in the 1 TB tier. The lists (`ingest/tiers/`) are committed so the replication package needs no BigQuery access
 
 --
 

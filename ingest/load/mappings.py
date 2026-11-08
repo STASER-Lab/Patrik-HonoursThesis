@@ -19,6 +19,7 @@ FIELD_TYPES: dict[str, dict] = {
     "comment_id": {"type": "long"},
     "review_id": {"type": "long"},
     "number": {"type": "long"},
+    "events": {"type": "long"},
     "state": {"type": "keyword"},
     "kind": {"type": "keyword"},
     "parent_type": {"type": "keyword"},
@@ -37,7 +38,7 @@ FIELD_TYPES: dict[str, dict] = {
 }
 
 ENTITY_FIELDS: dict[str, list[str]] = {
-    "repository": ["repo_id", "name", "is_fork"],
+    "repository": ["repo_id", "name", "is_fork", "events"],
     "person": ["person_id", "login", "is_bot"],
     "issue": [
         "issue_key",

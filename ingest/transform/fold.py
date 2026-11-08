@@ -61,6 +61,7 @@ class Folder:
         )
         rec = self.records["repository"][rid]
         rec.setdefault("is_fork", None)
+        rec["events"] = rec.get("events", 0) + 1  # each accepted event is added once
         return rid
 
     def _issue_snapshot(self, rid: int, issue: dict, version: Version) -> str:

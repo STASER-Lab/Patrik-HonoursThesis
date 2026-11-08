@@ -39,12 +39,27 @@ def accepted(
             yield ev
 
 
-def fold(events: Iterable[dict]) -> tuple[Folder, dict]:
-    """Operations 4 and 5: fold events into records, then add links"""
+def drop_forks(folder: Folder) -> Counter[str]:
+    forks = {
+        rid: r["events"]
+        for rid, r in folder.records["repository"].items()
+        if r["is_fork"]
+    }
+    if forks:
+        for entity in ("repository", "issue", "pull_request", "comment", "review"):
+            table = folder.records[entity]
+            for k in [k for k, r in table.items() if r["repo_id"] in forks]:
+                del table[k]
+    return Counter(repos=len(forks), events=sum(forks.values()))
+
+
+def fold(events: Iterable[dict]) -> tuple[Folder, dict, Counter[str]]:
+    """Operations 4 and 5: fold events into records, drop forks, add links"""
     folder = Folder()
     for ev in events:
         folder.add(ev)
-    return folder, add_links(folder)
+    forks = drop_forks(folder)
+    return folder, add_links(folder), forks
 
 
 def _authored(folder: Folder) -> Counter[str]:
@@ -55,7 +70,7 @@ def _authored(folder: Folder) -> Counter[str]:
     )
 
 
-def _summary(screen, validate, counts, start, records, links, authored) -> dict:
+def _summary(screen, validate, counts, start, records, links, authored, forks):
     total = authored["bot"] + authored["human"]
     return {
         "seconds": round(time.time() - start, 1),
@@ -65,6 +80,7 @@ def _summary(screen, validate, counts, start, records, links, authored) -> dict:
         "events_outside_repo_list": counts["outside_repo_list"],
         "events_rejected": dict(validate.rejected),
         "events_accepted": validate.accepted,
+        "forks_dropped": {"repos": forks["repos"], "events": forks["events"]},
         "records": dict(records),
         "links": dict(links),
         "authored_records": {
@@ -76,12 +92,18 @@ def _summary(screen, validate, counts, start, records, links, authored) -> dict:
 
 
 def run(files: Iterable[Path], keep: set[int] | None) -> tuple[Folder, dict]:
-    """Fold everything in memory (one bucket)"""
     screen, validate, counts = Screen(), Validator(), Counter()
     start = time.time()
-    folder, links = fold(accepted(files, keep, screen, validate, counts))
+    folder, links, forks = fold(accepted(files, keep, screen, validate, counts))
     summary = _summary(
-        screen, validate, counts, start, folder.counts(), links, _authored(folder)
+        screen,
+        validate,
+        counts,
+        start,
+        folder.counts(),
+        links,
+        _authored(folder),
+        forks,
     )
     return folder, summary
 
@@ -107,14 +129,16 @@ def run_bucketed(
     records: Counter[str] = Counter()
     links: Counter[str] = Counter()
     authored: Counter[str] = Counter()
+    forks: Counter[str] = Counter()
     people: dict[int, tuple] = {}
     outputs = {e: open(out / f"{e}.ndjson", "w") for e in ENTITIES if e != "person"}
     try:
         for path in paths:
             with gzip.open(path, "rt") as f:
-                folder, bucket_links = fold(map(json.loads, f))
+                folder, bucket_links, bucket_forks = fold(map(json.loads, f))
             path.unlink()
             links.update(bucket_links)
+            forks.update(bucket_forks)
             authored.update(_authored(folder))
             for entity, f in outputs.items():
                 for rec in folder.iter_records(entity):
@@ -134,7 +158,7 @@ def run_bucketed(
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     records["person"] = len(people)
     records = Counter({e: records[e] for e in ENTITIES})  # keep the usual order
-    return _summary(screen, validate, counts, start, records, links, authored)
+    return _summary(screen, validate, counts, start, records, links, authored, forks)
 
 
 def write_records(folder: Folder, out: Path) -> None:
