@@ -5,7 +5,7 @@ import json
 
 from ingest.transform.build_records import main, run
 
-from .test_operations import comment_on_pr, pr_opened
+from .test_operations import _pr_with_body, comment_on_pr, pr_opened
 
 IN_TIER, OUTSIDE = 10, 99
 
@@ -62,7 +62,7 @@ def test_without_a_repo_list_everything_is_validated(tmp_path):
     _, s = run(sample(tmp_path), keep=None)
     assert s["events_outside_repo_list"] == 0 and s["events_no_repo_id"] == 0
     assert s["events_rejected"] == {"empty payload": 2, "missing repo.id": 1}
-    assert s["events_accepted"] == 3    # includes the other repo's valid PR
+    assert s["events_accepted"] == 3
 
 
 def test_main_writes_records_and_summary(tmp_path):
@@ -82,3 +82,41 @@ def test_main_writes_records_and_summary(tmp_path):
         json.loads(ln) for ln in (out / "pull_request.ndjson").read_text().splitlines()
     ]
     assert [p["pr_key"] for p in prs] == ["10/5"]
+
+
+def _in_repo(event, repo_id):
+    return {**event, "repo": {"id": repo_id, "name": f"org/r{repo_id}"}}
+
+
+def test_buckets_give_the_same_records_as_in_memory(tmp_path):
+    alice_renamed = {"id": 1, "login": "alice-new", "type": "User"}
+    renamed = comment_on_pr(eid=2, user=alice_renamed, at="2024-01-10T13:00:00Z")
+    renamed["payload"]["issue"]["user"] = alice_renamed
+    events = [
+        _in_repo(pr_opened(eid=1), 10),
+        _in_repo(renamed, 10),
+        _in_repo(pr_opened(eid=3), 11),
+        _in_repo(_pr_with_body(6, "Fixes #5", eid=4), 11),
+        _in_repo(comment_on_pr(eid=5, cid=78), 11),
+    ]
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    write_gz(raw / "2024-01-10-0.json.gz", events)
+
+    outputs = {}
+    for n in (1, 2, 3):
+        out = tmp_path / f"out{n}"
+        assert main([str(raw), "--out", str(out), "--buckets", str(n)]) == 0
+        assert not (out / "buckets").exists()
+        summary = json.loads((out / "summary.json").read_text())
+        for k in ("seconds", "buckets"):
+            summary.pop(k)
+        files = {
+            p.name: sorted(p.read_text().splitlines()) for p in out.glob("*.ndjson")
+        }
+        outputs[n] = (files, summary)
+
+    assert outputs[1] == outputs[2] == outputs[3]
+    people = [json.loads(ln) for ln in outputs[2][0]["person.ndjson"]]
+    assert {p["person_id"]: p["login"] for p in people}[1] == "alice-new"
+    assert len(outputs[2][0]["link.ndjson"]) == 1

@@ -86,7 +86,7 @@
 
 **Decision** - Go with the buckets approach for now
 
-**Consequences** - Every issue, PR, comment and review belongs to exactly one repository, so buckets never need each other, and memory is bounded by bucket size
+**Consequences** - Every issue, PR, comment and review belongs to exactly one repository, so buckets never need each other, and memory is bounded by bucket size.
 
 --
 

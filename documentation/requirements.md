@@ -29,7 +29,7 @@ which can be a local single-node install for small data.
 |---|---|
 | Disk, raw data | About 2.5 GB per day of GH Archive data (about 100 MB per hourly file, compressed) |
 | Disk, outputs | Records take about half the size of the compressed downloads (measured: 48 hourly files, 4.7 GB → 2.4 GB of records). Bulk files are one copy of the records per layout, slightly larger for S2 (copied fields) |
-| Memory | Transform holds all records in memory, so RAM limits how much data one run can process |
+| Memory | Transform holds one repository bucket in memory at a time (`--buckets N`), plus all people, so RAM bounds the bucket size rather than the tier |
 
 ### Experiment cluster (Planned)
 
@@ -60,8 +60,9 @@ To run the experiment
   complete history. Edits and deletions of comments and reviews are never recorded.
 - History starts in 2024. A "first-time contributor" means first seen since
   1 January 2024. Earlier activity is not visible.
-- Transform is in-memory. All records are held in memory during one run.
-  Splitting work into repository buckets is planned for the largest tier.
+- Transform holds one bucket of repositories in memory at a time
+  (`--buckets N`, default 1 = everything in memory). People are kept for the
+  whole run, since they appear in many repositories.
 - Heuristics. Bot detection uses account type, a `[bot]` suffix, a login
   ending in "bot", and curated lists of known bots and of people whose login
   ends in "bot". Bots that post through a person's own account are missed. Issue–pull request links come from closing

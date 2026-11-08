@@ -100,9 +100,7 @@ def main(argv: list[str] | None = None) -> int:
 
     es = client(args.env_file)
     env = environment(es)
-    print(
-        f"Elasticsearch {env['elasticsearch_server']}, "
-    )
+    print(f"Elasticsearch {env['elasticsearch_server']} ")
 
     results = []
     for qname in args.queries.split(","):
