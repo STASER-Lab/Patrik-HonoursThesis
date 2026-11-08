@@ -129,6 +129,12 @@ def records_dir(tmp_path):
     repos.append(no_link)
     for entity in ("issue", "pull_request", "comment", "review", "link"):
         _write(tmp_path, entity, [r for repo in repos for r in repo[entity]])
+    sizes = {10: 6, 20: 11, 30: 56, 40: 506}
+    _write(
+        tmp_path,
+        "repository",
+        [{"repo_id": rid, "events": n} for rid, n in sizes.items()],
+    )
     return tmp_path
 
 

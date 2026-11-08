@@ -21,7 +21,9 @@ Issues and PRs share one number sequence per repository, so `issue_key` and `pr_
 
 ## Records
 
-**repository**: `repo_id`, `name` (latest seen), `is_fork` (from PR `base.repo.fork`; `null` if the repo has no PR events)
+**repository**: `repo_id`, `name` (latest seen), `is_fork` (from PR `base.repo.fork`; `null` if the repo has no PR events), `events` (accepted events in this ETL run)
+
+Forks (`is_fork` = true) are dropped with all their records after folding. People are kept.
 
 **person**: `person_id`, `login` (latest seen), `is_bot` (same rule as `author_is_bot`, from the latest event)
 

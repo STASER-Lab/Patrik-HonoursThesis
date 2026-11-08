@@ -29,11 +29,13 @@ def settings_from(env_file: Path | None = None) -> dict[str, str | None]:
         src.setdefault("ES_API_KEY", f.get("ES_LOCAL_API_KEY", ""))
         src.setdefault("ES_USER", "elastic")
         src.setdefault("ES_PASSWORD", f.get("ES_LOCAL_PASSWORD", ""))
+        src.setdefault("ES_CA_CERTS", f.get("ES_CA_CERTS", ""))
     return {
         "url": src.get("ES_URL") or "http://localhost:9200",
         "api_key": src.get("ES_API_KEY") or None,
         "user": src.get("ES_USER") or None,
         "password": src.get("ES_PASSWORD") or None,
+        "ca_certs": src.get("ES_CA_CERTS") or None,
     }
 
 
@@ -43,8 +45,9 @@ def client(env_file: Path | None = None):
     )  # imported here so tests don't need the package
 
     s = settings_from(env_file)
+    tls = {"ca_certs": s["ca_certs"]} if s["ca_certs"] else {}
     if s["api_key"]:
-        return Elasticsearch(s["url"], api_key=s["api_key"])
+        return Elasticsearch(s["url"], api_key=s["api_key"], **tls)
     if s["user"] and s["password"]:
-        return Elasticsearch(s["url"], basic_auth=(s["user"], s["password"]))
-    return Elasticsearch(s["url"])
+        return Elasticsearch(s["url"], basic_auth=(s["user"], s["password"]), **tls)
+    return Elasticsearch(s["url"], **tls)

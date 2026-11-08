@@ -5,7 +5,7 @@ import json
 
 from ingest.transform.build_records import main, run
 
-from .test_operations import _pr_with_body, comment_on_pr, pr_opened
+from .test_operations import _pr_with_body, comment_on_pr, pr_obj, pr_opened
 
 IN_TIER, OUTSIDE = 10, 99
 
@@ -88,6 +88,27 @@ def _in_repo(event, repo_id):
     return {**event, "repo": {"id": repo_id, "name": f"org/r{repo_id}"}}
 
 
+def _fork_pr(repo_id, eid):
+    e = _in_repo(pr_opened(eid=eid), repo_id)
+    e["payload"]["pull_request"] = pr_obj(fork=True)
+    return e
+
+
+def test_forks_are_dropped_and_events_counted(tmp_path):
+    events = [
+        pr_opened(eid=1),
+        comment_on_pr(eid=2),
+        _fork_pr(12, eid=3),
+        _in_repo(comment_on_pr(eid=4, cid=79), 12),
+    ]
+    folder, s = run([write_gz(tmp_path / "a.json.gz", events)], keep=None)
+    assert set(folder.records["repository"]) == {IN_TIER}
+    assert folder.records["repository"][IN_TIER]["events"] == 2
+    assert all(r["repo_id"] == IN_TIER for r in folder.records["comment"].values())
+    assert s["forks_dropped"] == {"repos": 1, "events": 2}
+    assert s["records"]["repository"] == 1
+
+
 def test_buckets_give_the_same_records_as_in_memory(tmp_path):
     alice_renamed = {"id": 1, "login": "alice-new", "type": "User"}
     renamed = comment_on_pr(eid=2, user=alice_renamed, at="2024-01-10T13:00:00Z")
@@ -98,6 +119,7 @@ def test_buckets_give_the_same_records_as_in_memory(tmp_path):
         _in_repo(pr_opened(eid=3), 11),
         _in_repo(_pr_with_body(6, "Fixes #5", eid=4), 11),
         _in_repo(comment_on_pr(eid=5, cid=78), 11),
+        _fork_pr(12, eid=6),
     ]
     raw = tmp_path / "raw"
     raw.mkdir()
@@ -120,3 +142,4 @@ def test_buckets_give_the_same_records_as_in_memory(tmp_path):
     people = [json.loads(ln) for ln in outputs[2][0]["person.ndjson"]]
     assert {p["person_id"]: p["login"] for p in people}[1] == "alice-new"
     assert len(outputs[2][0]["link.ndjson"]) == 1
+    assert outputs[2][1]["forks_dropped"] == {"repos": 1, "events": 1}

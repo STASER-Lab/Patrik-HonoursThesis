@@ -29,32 +29,18 @@ class Records:
 
 
 def repo_sizes(records_dir: Path) -> Counter[int]:
-    """Issues, PRs, comments and reviews per repository (the size used to rank)"""
-    sizes: Counter[int] = Counter()
-    for entity in ("issue", "pull_request", "comment", "review"):
-        with open(records_dir / f"{entity}.ndjson") as f:
-            for line in f:
-                sizes[json.loads(line)["repo_id"]] += 1
-    return sizes
+    with open(records_dir / "repository.ndjson") as f:
+        return Counter({r["repo_id"]: r["events"] for r in map(json.loads, f)})
 
 
 def _link_candidates(records_dir: Path) -> set[int]:
-    """Repositories with at least one PR-to-issue link.
-
-    Q5 and Q6 can only be informative with such a link, so other repositories
-    are skipped before the (slower) reference answers are computed.
-    """
+    """Repositories with at least one PR-to-issue link."""
     with open(records_dir / "link.ndjson") as f:
         return {r["repo_id"] for r in map(json.loads, f) if r["target_type"] == "issue"}
 
 
 def pick_repos(records_dir: Path, queries: tuple[str, ...] = QUERIES) -> dict:
-    """Pick the small, median and largest repository that every query can use.
-
-    A repository is eligible when every query's reference answer is informative
-    (each query module's `informative`). Eligible repositories are ranked by
-    size (ties by repo_id) and the first, middle and last are picked.
-    """
+    """Pick the small, median and largest repository that every query can use."""
     sizes = repo_sizes(records_dir)
     candidates = _link_candidates(records_dir)
     data = Records(records_dir, candidates)

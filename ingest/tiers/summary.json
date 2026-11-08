@@ -1,0 +1,39 @@
+{
+  "pool": {
+    "file": "pool.csv",
+    "sha256": "a560040f39ed9ec01628c612f4e6fbd659d1e4566154bea596a241e5738013b3",
+    "repos": 1078278,
+    "events": 181692189,
+    "median_events": 26.0,
+    "top_1pct_share": 0.4252,
+    "largest": 747515
+  },
+  "seed": 2024,
+  "cap": 0.1,
+  "tiers": {
+    "10gb": {
+      "target_events": 675000,
+      "repos": 4211,
+      "events": 691109,
+      "median_events": 28,
+      "top_1pct_share": 0.3809,
+      "largest": 23773
+    },
+    "100gb": {
+      "target_events": 6750000,
+      "repos": 40335,
+      "events": 6881396,
+      "median_events": 26,
+      "top_1pct_share": 0.4328,
+      "largest": 208694
+    },
+    "1tb": {
+      "target_events": 67500000,
+      "repos": 400198,
+      "events": 67740612,
+      "median_events": 26.0,
+      "top_1pct_share": 0.4277,
+      "largest": 747515
+    }
+  }
+}
