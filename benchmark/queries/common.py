@@ -6,7 +6,7 @@ from datetime import datetime
 
 WINDOW_START = "2024-01-01T00:00:00Z"
 WINDOW_END = "2025-06-01T00:00:00Z"
-ESQL_LIMIT = 10_000     # ES|QL row return limit
+ESQL_LIMIT = 10_000  # ES|QL row return limit
 
 
 def idx(strategy: str, tier: str, entity: str) -> str:
@@ -29,12 +29,17 @@ def window_filter(field: str = "created_at") -> dict:
     return {"range": {field: {"gte": WINDOW_START, "lt": WINDOW_END}}}
 
 
-def search_all(es, index: str, query: dict, source: list[str], 
-               sort_field: str, page: int = 1000):
+def search_all(
+    es, index: str, query: dict, source: list[str], sort_field: str, page: int = 1000
+):
     hits, requests, after = [], 0, None
     while True:
-        body = {"query": query, "_source": source, "size": page, "sort": 
-            [{sort_field: "asc"}]}
+        body = {
+            "query": query,
+            "_source": source,
+            "size": page,
+            "sort": [{sort_field: "asc"}],
+        }
         if after is not None:
             body["search_after"] = after
         resp = es.search(index=index, **body)
@@ -46,15 +51,20 @@ def search_all(es, index: str, query: dict, source: list[str],
         after = batch[-1]["sort"]
 
 
-def composite_all(es, index: str, query: dict, sources: 
-    list[dict], aggs: dict, page: int = 1000):
+def composite_all(
+    es, index: str, query: dict, sources: list[dict], aggs: dict, page: int = 1000
+):
     buckets, requests, after = [], 0, None
     while True:
         comp = {"size": page, "sources": sources}
         if after:
             comp["after"] = after
-        resp = es.search(index=index, size=0, query=query,
-                         aggs={"c": {"composite": comp, "aggs": aggs}})
+        resp = es.search(
+            index=index,
+            size=0,
+            query=query,
+            aggs={"c": {"composite": comp, "aggs": aggs}},
+        )
         requests += 1
         agg = resp["aggregations"]["c"]
         buckets.extend(agg["buckets"])

@@ -75,9 +75,7 @@ def main(argv: list[str] | None = None) -> int:
                 }
                 try:
                     start = time.perf_counter()
-                    actual, requests = getattr(q, s)(
-                        es, args.tier, repo_id, **params
-                    )
+                    actual, requests = getattr(q, s)(es, args.tier, repo_id, **params)
                     row.update(
                         ms=round((time.perf_counter() - start) * 1000, 1),
                         requests=requests,
@@ -98,13 +96,11 @@ def main(argv: list[str] | None = None) -> int:
                     or row.get("diff")
                     or f"{row['requests']} req, {row['ms']} ms"
                 )
-                print(f"{status}  {qname} {label:8} {s} "
-                      f"({size} answers)  {detail}")
+                print(f"{status}  {qname} {label:8} {s} ({size} answers)  {detail}")
                 results.append(row)
 
     out = (
-        Path("data/results") / 
-        f"check-{args.tier}-{datetime.now():%Y%m%d-%H%M%S}.json"
+        Path("data/results") / f"check-{args.tier}-{datetime.now():%Y%m%d-%H%M%S}.json"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"repos": repos, "results": results}, indent=2))

@@ -19,3 +19,5 @@ Tracks AI assistance, for transparency in the research project
 | 2026-10-29 | Claude | Profiler output and storage measurement | Documentation updates |
 
 | 2026-11-01 | Lucidchart | Diagram generation | Edit naming and style |
+
+| 2026-11-07 | Claude | Query implementation in Python | Logic checks and query structure |

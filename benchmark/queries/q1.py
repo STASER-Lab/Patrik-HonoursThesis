@@ -14,19 +14,6 @@ from .common import (
     window_filter,
 )
 
-RATING = {
-    "s1": "Workaround: PR list, then comment and review agagregations; the self-response "
-    "exclusion and the join happen in Python (more than 3 requests)",
-    "s2": "Workaround: copies let the comment/review queries exclude self-responses and "
-    "filter by PR date in Elasticsearch, but reviews are a second index and unanswered "
-    "PRs need the PR list (more than 3 requests)",
-    "s3": "Workaround: one search returns each PR with its nested comments and reviews, but "
-    "'not the PR author' compares a nested field with a parent field, which a nested "
-    "query cannot do, so the minimum is taken in Python",
-    "s4": "Workaround: one ES|QL query (union of comments and reviews, LOOKUP JOIN to PRs) "
-    "computes first-response times. Unanswered PRs need a second query",
-}
-
 
 def _pr_filter(repo_id: int) -> dict:
     return {
@@ -203,7 +190,8 @@ def s4(es, tier, repo_id):
         FROM {c},{r}
         | WHERE repo_id == {int(repo_id)} AND author_is_bot == false
           AND (parent_type == "pr" OR parent_type IS NULL)
-        | EVAL pr_key = COALESCE(parent_key, pr_key), responded_at = COALESCE(created_at, submitted_at)
+        | EVAL pr_key = COALESCE(parent_key, pr_key),
+        responded_at = COALESCE(created_at, submitted_at)
         | RENAME author_id AS responder_id
         | KEEP pr_key, responder_id, responded_at
         | LOOKUP JOIN {p} ON pr_key
