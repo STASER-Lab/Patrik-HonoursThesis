@@ -82,7 +82,7 @@
 
 **Proposed** - Before folding, partition validated events into N buckets by `hash(repo_id)` on disk, then fold each bucket independently. People are merged across buckets at the end
 
-**Context** - Performance considerations
+**Context** - Reduce peak memory usage when operating on large data tiers
 
 **Decision** - Go with the buckets approach for now
 
