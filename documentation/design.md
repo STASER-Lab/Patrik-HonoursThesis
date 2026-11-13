@@ -122,7 +122,7 @@ Rally is Elasticsearch's benchmarking framework. The Rally tracks that measure q
 
 ## Cluster (Under construction)
 
-Like Rally, the cluster's supporting services live apart from the Elasticsearch nodes. The cluster runs on five physical Arbutus servers: four each host one Elasticsearch data node, and the fifth hosts the tooling (Kubernetes control, ingest, Rally and monitoring), so nothing shares a host with a data node and skews the measurements. This section will be expanded as the cluster is built.
+Like Rally, the cluster's supporting services live apart from the Elasticsearch nodes. The cluster runs on five physical Arbutus servers: four each host one Elasticsearch data node (three are master-eligible), and the fifth hosts the tooling (Kubernetes control, ingest, Rally and monitoring), so nothing shares a host with a data node and skews the measurements. This section will be expanded as the cluster is built.
 
 ### OpenTofu
 
