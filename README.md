@@ -1,4 +1,4 @@
-![STASER logo](documentation/assets/images/staser-logo.png)
+<img alt="STASER logo" src="documentation/assets/images/staser-logo.png?raw=true" width="40">
 
 [![Build and Deploy Documentation](https://github.com/STASER-Lab/Patrik-HonoursThesis/actions/workflows/pages.yml/badge.svg)](https://github.com/STASER-Lab/Patrik-HonoursThesis/actions/workflows/pages.yml)
 
