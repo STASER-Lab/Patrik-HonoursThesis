@@ -8,4 +8,4 @@ To learn more about STASER-Lab, visit https://staser-lab.github.io.
 
 ## Documentation
 
-Documentation is available at https://staser-lab.github.io/Patrik-HonoursThesis/, providing an overview of the project, including its technical details, background, and usage examples. It is generated from the source files in `documentation/`.
+Documentation is available at https://staser-lab.github.io/Patrik-HonoursThesis/. It provides an overview of the project, including its technical details, background, and usage examples. Documentation is generated from the source files in `documentation/`.
