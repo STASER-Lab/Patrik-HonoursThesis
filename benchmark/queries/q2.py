@@ -1,4 +1,8 @@
-"""Q2: share of merged PRs with at least one review"""
+"""Q2: time from PR opened to first response, per PR
+
+A response is the earliest comment or review by a human other than the PR author.
+Covers human PRs opened in the window. An unanswered PR maps to None.
+"""
 
 from __future__ import annotations
 
@@ -7,18 +11,36 @@ from .common import (
     WINDOW_START,
     composite_all,
     esql_rows,
-    idx,
     in_window,
+    index_name,
+    keep_earliest,
     search_all,
+    seconds_between,
     window_filter,
 )
 
+_CHILDREN = (
+    ("comment", "parent_key", "created_at", [{"term": {"parent_type": "pr"}}]),
+    ("review", "pr_key", "submitted_at", []),
+)
 
-def _answer(merged: int, reviewed: int) -> dict:
+
+def _pr_filter(repo_id: int) -> dict:
     return {
-        "merged": merged,
-        "reviewed": reviewed,
-        "share": round(reviewed / merged, 4) if merged else None,
+        "bool": {
+            "filter": [
+                {"term": {"repo_id": repo_id}},
+                window_filter(),
+                {"term": {"author_is_bot": False}},
+            ]
+        }
+    }
+
+
+def _finish(prs: dict, first: dict) -> dict:
+    return {
+        k: (seconds_between(p["created_at"], first[k]) if k in first else None)
+        for k, p in sorted(prs.items())
     }
 
 
@@ -26,158 +48,165 @@ def reference(data, repo_id: int) -> dict:
     prs = {
         p["pr_key"]: p
         for p in data.records("pull_request", repo_id)
-        if in_window(p["merged_at"]) and not p["author_is_bot"]
+        if in_window(p["created_at"]) and not p["author_is_bot"]
     }
-    reviewed = {
-        r["pr_key"]
-        for r in data.records("review", repo_id)
-        if r["pr_key"] in prs
-        and not r["author_is_bot"]
-        and r["author_id"] != prs[r["pr_key"]]["author_id"]
-    }
-    return _answer(len(prs), len(reviewed))
+    first: dict = {}
+    items = [
+        (c["parent_key"], c, "created_at")
+        for c in data.records("comment", repo_id)
+        if c["parent_type"] == "pr"
+    ] + [(r["pr_key"], r, "submitted_at") for r in data.records("review", repo_id)]
+    for k, item, tf in items:
+        if (pr := prs.get(k)) and not item["author_is_bot"]:
+            if item["author_id"] != pr["author_id"]:
+                keep_earliest(first, k, item[tf])
+    return _finish(prs, first)
 
 
 def informative(answer: dict) -> bool:
-    return answer["merged"] > 0 and answer["reviewed"] > 0
+    return any(v is not None for v in answer.values())
 
 
-def _merged_filter(repo_id):
-    return {
-        "bool": {
-            "filter": [
-                {"term": {"repo_id": repo_id}},
-                window_filter("merged_at"),
-                {"term": {"author_is_bot": False}},
-            ]
-        }
-    }
+def _pr_list(es, layout, tier, repo_id):
+    hits, n = search_all(
+        es,
+        index_name(layout, tier, "pull_request"),
+        _pr_filter(repo_id),
+        ["pr_key", "author_id", "created_at"],
+        "pr_key",
+    )
+    return {h["_source"]["pr_key"]: h["_source"] for h in hits}, n
 
 
 def s1(es, tier, repo_id):
-    hits, n = search_all(
-        es,
-        idx("s1", tier, "pull_request"),
-        _merged_filter(repo_id),
-        ["pr_key", "author_id"],
-        "pr_key",
-    )
-    authors = {h["_source"]["pr_key"]: h["_source"]["author_id"] for h in hits}
-    buckets, m = composite_all(
-        es,
-        idx("s1", tier, "review"),
-        {
-            "bool": {
-                "filter": [
-                    {"term": {"repo_id": repo_id}},
-                    {"term": {"author_is_bot": False}},
-                ]
-            }
-        },
-        [
-            {"pr": {"terms": {"field": "pr_key"}}},
-            {"who": {"terms": {"field": "author_id"}}},
-        ],
-        {},
-    )
-    reviewed = {
-        b["key"]["pr"]
-        for b in buckets
-        if b["key"]["pr"] in authors and b["key"]["who"] != authors[b["key"]["pr"]]
-    }
-    return _answer(len(authors), len(reviewed)), n + m
+    prs, n = _pr_list(es, "s1", tier, repo_id)
+    first: dict = {}
+    for entity, key_field, time_field, extra in _CHILDREN:
+        buckets, m = composite_all(
+            es,
+            index_name("s1", tier, entity),
+            {
+                "bool": {
+                    "filter": [
+                        {"term": {"repo_id": repo_id}},
+                        {"term": {"author_is_bot": False}},
+                        *extra,
+                    ]
+                }
+            },
+            [
+                {"pr": {"terms": {"field": key_field}}},
+                {"who": {"terms": {"field": "author_id"}}},
+            ],
+            {"t": {"min": {"field": time_field}}},
+        )
+        n += m
+        for b in buckets:
+            if (pr := prs.get(b["key"]["pr"])) and b["key"]["who"] != pr["author_id"]:
+                keep_earliest(first, b["key"]["pr"], b["t"]["value_as_string"])
+    return _finish(prs, first), n
 
 
 def s2(es, tier, repo_id):
-    pr_idx, rv_idx = idx("s2", tier, "pull_request"), idx("s2", tier, "review")
+    prs, n = _pr_list(es, "s2", tier, repo_id)
     not_self = {
         "script": {
             "script": {
-                "source": "doc.containsKey('parent_author_id') && "
-                "doc['parent_author_id'].size() > 0 && "
-                "doc['author_id'].value != doc['parent_author_id'].value"
+                "source": "doc['author_id'].value != doc['parent_author_id'].value"
             }
         }
     }
-    resp = es.search(
-        index=f"{pr_idx},{rv_idx}",
-        size=0,
-        query={"term": {"repo_id": repo_id}},
-        aggs={
-            "merged": {
-                "filter": {
-                    "bool": {
-                        "filter": [
-                            {"term": {"_index": pr_idx}},
-                            window_filter("merged_at"),
-                            {"term": {"author_is_bot": False}},
-                        ]
-                    }
+    first: dict = {}
+    for entity, key_field, time_field, extra in _CHILDREN:
+        buckets, m = composite_all(
+            es,
+            index_name("s2", tier, entity),
+            {
+                "bool": {
+                    "filter": [
+                        {"term": {"repo_id": repo_id}},
+                        {"term": {"author_is_bot": False}},
+                        {"term": {"parent_author_is_bot": False}},
+                        window_filter("parent_created_at"),
+                        not_self,
+                        *extra,
+                    ]
                 }
             },
-            "reviewed": {
-                "filter": {
-                    "bool": {
-                        "filter": [
-                            {"term": {"_index": rv_idx}},
-                            window_filter("parent_merged_at"),
-                            {"term": {"parent_author_is_bot": False}},
-                            {"term": {"author_is_bot": False}},
-                            not_self,
-                        ]
-                    }
-                },
-                "aggs": {"prs": {"terms": {"field": "pr_key", "size": 65_000}}},
-            },
-        },
-    )
-    a = resp["aggregations"]
-    return _answer(a["merged"]["doc_count"], len(a["reviewed"]["prs"]["buckets"])), 1
+            [{"pr": {"terms": {"field": key_field}}}],
+            {"t": {"min": {"field": time_field}}},
+        )
+        n += m
+        for b in buckets:
+            keep_earliest(first, b["key"]["pr"], b["t"]["value_as_string"])
+    return _finish(prs, first), n
 
 
 def s3(es, tier, repo_id):
     hits, n = search_all(
         es,
-        idx("s3", tier, "pull_request"),
-        _merged_filter(repo_id),
-        ["pr_key", "author_id", "reviews.author_id", "reviews.author_is_bot"],
+        index_name("s3", tier, "pull_request"),
+        _pr_filter(repo_id),
+        [
+            "pr_key",
+            "author_id",
+            "created_at",
+            "comments.author_id",
+            "comments.author_is_bot",
+            "comments.created_at",
+            "reviews.author_id",
+            "reviews.author_is_bot",
+            "reviews.submitted_at",
+        ],
         "pr_key",
     )
-    reviewed = 0
+    prs, first = {}, {}
     for h in hits:
         pr = h["_source"]
-        reviewed += any(
-            not r["author_is_bot"] and r["author_id"] != pr["author_id"]
-            for r in pr.get("reviews", [])
-        )
-    return _answer(len(hits), reviewed), n
+        prs[pr["pr_key"]] = pr
+        for child, tf in (("comments", "created_at"), ("reviews", "submitted_at")):
+            for c in pr.get(child, ()):
+                if not c["author_is_bot"] and c["author_id"] != pr["author_id"]:
+                    keep_earliest(first, pr["pr_key"], c[tf])
+    return _finish(prs, first), n
 
 
 def s4(es, tier, repo_id):
-    rv, pr = idx("s4", tier, "review"), idx("s4", tier, "pull_request")
-    merged_window = (
-        f'merged_at >= TO_DATETIME("{WINDOW_START}") '
-        f'AND merged_at < TO_DATETIME("{WINDOW_END}")'
+    c, r, p = (
+        index_name("s4", tier, "comment"),
+        index_name("s4", tier, "review"),
+        index_name("s4", tier, "pull_request"),
     )
-    num = esql_rows(
+    window = (
+        f'created_at >= TO_DATETIME("{WINDOW_START}") '
+        f'AND created_at < TO_DATETIME("{WINDOW_END}")'
+    )
+    # Comments and reviews are read together: reviews have no parent_type, and
+    # COALESCE merges the two schemas
+    answered = esql_rows(
         es,
         f"""
-        FROM {rv}
+        FROM {c},{r}
         | WHERE repo_id == {int(repo_id)} AND author_is_bot == false
-        | RENAME author_id AS reviewer_id
-        | KEEP pr_key, reviewer_id
-        | LOOKUP JOIN {pr} ON pr_key
-        | WHERE author_is_bot == false AND reviewer_id != author_id AND {merged_window}
-        | STATS reviews = COUNT(*) BY pr_key
-        | STATS reviewed = COUNT(*)
+          AND (parent_type == "pr" OR parent_type IS NULL)
+        | EVAL pr_key = COALESCE(parent_key, pr_key),
+        responded_at = COALESCE(created_at, submitted_at)
+        | RENAME author_id AS responder_id
+        | KEEP pr_key, responder_id, responded_at
+        | LOOKUP JOIN {p} ON pr_key
+        | WHERE author_is_bot == false AND responder_id != author_id AND {window}
+        | STATS first_response = MIN(responded_at) BY pr_key, created_at
+        | EVAL seconds = DATE_DIFF("seconds", created_at, first_response)
+        | KEEP pr_key, seconds
         | LIMIT 10000""",
     )
-    den = esql_rows(
+    all_prs = esql_rows(
         es,
         f"""
-        FROM {pr}
-        | WHERE repo_id == {int(repo_id)} AND author_is_bot == false AND {merged_window}
-        | STATS merged = COUNT(*)
+        FROM {p}
+        | WHERE repo_id == {int(repo_id)} AND author_is_bot == false AND {window}
+        | KEEP pr_key
         | LIMIT 10000""",
     )
-    return _answer(den[0]["merged"], num[0]["reviewed"] if num else 0), 2
+    secs = {row["pr_key"]: row["seconds"] for row in answered}
+    return {k: secs.get(k) for k in sorted(r["pr_key"] for r in all_prs)}, 2

@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software in your research, please cite it."
-title: "Scalable Elasticsearch infrastructure for software repository data"
+title: "Evaluating distributed document layouts for software repository activity"
 authors:
   - family-names: "Balazsy"
     given-names: "Patrik"

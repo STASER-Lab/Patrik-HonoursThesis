@@ -3,37 +3,35 @@ data/
 *.json.gz
 *.ndjson
 
-# Secrets
-.env
+# Credentials
 *.env
-!env.example
+elastic-start-local/
+clouds.yaml
+*openrc*.sh
+kubeconfig*
 *secrets*.json
+
+# OpenTofu
+.terraform/
 *.tfstate
 *.tfstate.*
-.terraform/
-clouds.yaml
-kubeconfig*
+*.tfvars
+crash.log
 
 # Python
 .venv/
 __pycache__/
-*.pyc
-.pytest_cache/
-.coverage
 *.egg-info/
+.pytest_cache/
+.ruff_cache/
 
-# macOS, editor
-.DS_Store
-.vscode/
-
-# Documentation
+# Documentation build
 documentation/_site/
 documentation/.jekyll-cache/
 documentation/.bundle/
 documentation/vendor/
-documentation/Gemfile.lock
 
-# Planned
-documentation/pipeline/
-documentation/model.md
-documentation/test.md
+# Operating system and editors
+.DS_Store
+.vscode/
+.idea/

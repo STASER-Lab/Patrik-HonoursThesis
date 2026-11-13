@@ -1,83 +1,95 @@
-"""Q4: share of a month's first-time contributors who contribute again within 90 days"""
+"""Q4: median time to first response (Q2) for first-time vs regular PR authors
+
+An author is first-time if they had no activity in the repository before opening
+the PR. Activity before the window is not seen.
+"""
 
 from __future__ import annotations
 
-from collections import Counter
-from datetime import UTC, datetime
+import statistics
 
-from . import activity
-from .common import WINDOW_END, WINDOW_START, esql_rows, idx
-
-LAST_COHORT = "2024-09"
-FOLLOW_UP = 90 * 86_400
+from . import contributors, q2
+from .common import WINDOW_END, WINDOW_START, esql_rows, in_window, index_name
 
 
-def _cohorts(times: dict) -> dict:
-    newcomers: Counter[str] = Counter()
-    returned: Counter[str] = Counter()
-    for person_times in times.values():
-        first = person_times[0]
-        cohort = datetime.fromtimestamp(first, UTC).strftime("%Y-%m")
-        if cohort > LAST_COHORT:
-            continue
-        newcomers[cohort] += 1
-        returned[cohort] += any(
-            first < t <= first + FOLLOW_UP for t in person_times[1:]
-        )
+def _group(labels: dict, ttfr: dict) -> dict:
+    out = {}
+    for group, flag in (("first_time", True), ("regular", False)):
+        keys = [k for k, first in labels.items() if first == flag]
+        answered = [ttfr[k] for k in keys if ttfr.get(k) is not None]
+        out[group] = {
+            "prs": len(keys),
+            "answered": len(answered),
+            "median_seconds": statistics.median(answered) if answered else None,
+        }
+    return out
+
+
+def _labels(prs: dict, times: dict) -> dict:
     return {
-        m: {"newcomers": n, "returned": returned[m], "share": round(returned[m] / n, 4)}
-        for m, n in sorted(newcomers.items())
+        k: times[p["author_id"]][0] == contributors.epoch(p["created_at"])
+        for k, p in prs.items()
     }
 
 
 def reference(data, repo_id: int) -> dict:
-    return _cohorts(activity.reference(data, repo_id))
+    prs = {
+        p["pr_key"]: p
+        for p in data.records("pull_request", repo_id)
+        if in_window(p["created_at"]) and not p["author_is_bot"]
+    }
+    return _group(
+        _labels(prs, contributors.reference(data, repo_id)), q2.reference(data, repo_id)
+    )
 
 
 def informative(answer: dict) -> bool:
-    return bool(answer)
+    return all(g["answered"] > 0 for g in answer.values())
+
+
+def _run(layout, es, tier, repo_id):
+    ttfr, n1 = getattr(q2, layout)(es, tier, repo_id)
+    prs, n2 = q2._pr_list(es, layout, tier, repo_id)
+    times, n3 = (
+        contributors.nested(es, tier, repo_id)
+        if layout == "s3"
+        else contributors.flat_indexes(es, layout, tier, repo_id)
+    )
+    return _group(_labels(prs, times), ttfr), n1 + n2 + n3
 
 
 def s1(es, tier, repo_id):
-    times, n = activity.flat_indexes(es, "s1", tier, repo_id)
-    return _cohorts(times), n
+    return _run("s1", es, tier, repo_id)
 
 
 def s2(es, tier, repo_id):
-    times, n = activity.flat_indexes(es, "s2", tier, repo_id)
-    return _cohorts(times), n
+    return _run("s2", es, tier, repo_id)
 
 
 def s3(es, tier, repo_id):
-    times, n = activity.nested(es, tier, repo_id)
-    return _cohorts(times), n
+    return _run("s3", es, tier, repo_id)
 
 
 def s4(es, tier, repo_id):
+    ttfr, n1 = q2.s4(es, tier, repo_id)
     i, p, c, r = (
-        idx("s4", tier, e) for e in ("issue", "pull_request", "comment", "review")
+        index_name("s4", tier, e)
+        for e in ("issue", "pull_request", "comment", "review")
     )
     rows = esql_rows(
         es,
         f"""
-        FROM {i},{p},{c},{r}
+        FROM {i},{p},{c},{r} METADATA _index
         | WHERE repo_id == {int(repo_id)} AND author_is_bot == false
         | EVAL t = COALESCE(created_at, submitted_at)
         | WHERE t >= TO_DATETIME("{WINDOW_START}") AND t < TO_DATETIME("{WINDOW_END}")
-        | KEEP author_id, t
+        | KEEP _index, pr_key, author_id, t
         | INLINE STATS first_at = MIN(t) BY author_id
-        | EVAL again = CASE(t > first_at AND t <= first_at + 90 days, 1, 0)
-        | STATS came_back = MAX(again) BY author_id, first_at
-        | EVAL cohort = DATE_FORMAT("yyyy-MM", first_at)
-        | WHERE cohort <= "{LAST_COHORT}"
-        | STATS newcomers = COUNT(*), returned = SUM(came_back) BY cohort
+        | WHERE _index == "{p}"
+        | EVAL first_time = first_at == t
+        | KEEP pr_key, first_time
         | LIMIT 10000""",
     )
-    return {
-        row["cohort"]: {
-            "newcomers": row["newcomers"],
-            "returned": row["returned"],
-            "share": round(row["returned"] / row["newcomers"], 4),
-        }
-        for row in sorted(rows, key=lambda x: x["cohort"])
-    }, 1
+    # first_at == t counts same-second activity as first-time, as _labels does
+    labels = {row["pr_key"]: row["first_time"] for row in rows if row["pr_key"] in ttfr}
+    return _group(labels, ttfr), n1 + 1

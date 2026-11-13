@@ -1,0 +1,25 @@
+{
+  "dev": {
+    "repos": {
+      "small": 29815410,
+      "median": 721652376,
+      "largest": 197275551
+    },
+    "sizes": {
+      "small": 5,
+      "median": 58,
+      "largest": 11506
+    },
+    "eligible": 1290,
+    "queries": [
+      "q1",
+      "q2",
+      "q3",
+      "q4",
+      "q5",
+      "q6",
+      "q7"
+    ],
+    "records": "data/records"
+  }
+}

@@ -1,11 +1,21 @@
-"""Index settings and mappings for strategies"""
+"""Index settings and strict mappings for the four layouts.
+
+S1  one index per entity. Joins happen in the client.
+S2  as S1, but children carry copies of their parent's fields (`parent_*`. Links
+    carry `pr_*` and `issue_*`), so filters on the parent need no join.
+S3  comments, reviews and links are nested in their issue or PR. There are no child
+    indexes.
+S4  as S1, with parents as lookup indexes for ES|QL LOOKUP JOIN.
+
+Mappings are strict, so an unmapped field fails the load instead of being indexed
+dynamically.
+"""
 
 from __future__ import annotations
 
-import copy
+LAYOUTS = ("s1", "s2", "s3", "s4")
 
-STRATEGIES = ("s1", "s2", "s3", "s4")
-
+# One type per field name in every layout, so layouts are compared like for like
 FIELD_TYPES: dict[str, dict] = {
     "pr_key": {"type": "keyword"},
     "issue_key": {"type": "keyword"},
@@ -37,35 +47,23 @@ FIELD_TYPES: dict[str, dict] = {
     "body": {"type": "text"},
 }
 
+_THREAD = [
+    "repo_id",
+    "number",
+    "author_id",
+    "author_is_bot",
+    "title",
+    "body",
+    "state",
+    "created_at",
+    "closed_at",
+]
+
 ENTITY_FIELDS: dict[str, list[str]] = {
     "repository": ["repo_id", "name", "is_fork", "events"],
     "person": ["person_id", "login", "is_bot"],
-    "issue": [
-        "issue_key",
-        "repo_id",
-        "number",
-        "author_id",
-        "author_is_bot",
-        "title",
-        "body",
-        "state",
-        "created_at",
-        "closed_at",
-    ],
-    "pull_request": [
-        "pr_key",
-        "repo_id",
-        "number",
-        "author_id",
-        "author_is_bot",
-        "title",
-        "body",
-        "state",
-        "created_at",
-        "closed_at",
-        "merged_at",
-        "merged",
-    ],
+    "issue": ["issue_key", *_THREAD],
+    "pull_request": ["pr_key", *_THREAD, "merged_at", "merged"],
     "comment": [
         "comment_id",
         "repo_id",
@@ -98,102 +96,61 @@ ENTITY_FIELDS: dict[str, list[str]] = {
     ],
 }
 
-S2_COPIED = [
-    "author_id",
-    "author_is_bot",
-    "state",
-    "created_at",
-    "closed_at",
-    "merged",
-    "merged_at",
-]
-
-S2_LINK_COPIED = {
-    "pr": S2_COPIED,
-    "issue": ["author_id", "author_is_bot", "state", "created_at", "closed_at"],
-}
+# Only fields that filters and joins need. Text is never copied
+_ISSUE_COPIED = ["author_id", "author_is_bot", "state", "created_at", "closed_at"]
+S2_COPIED = [*_ISSUE_COPIED, "merged", "merged_at"]
+S2_LINK_COPIED = {"pr": S2_COPIED, "issue": _ISSUE_COPIED}
 
 LOOKUP_INDEXES = ("pull_request", "issue", "person", "link")
 
 
 def _properties(fields: list[str]) -> dict:
-    return {f: copy.deepcopy(FIELD_TYPES[f]) for f in fields}
+    return {f: dict(FIELD_TYPES[f]) for f in fields}
 
 
-def s2_link_copy_properties() -> dict:
-    return {
-        f"{parent}_{f}": copy.deepcopy(FIELD_TYPES[f])
-        for parent, fields in S2_LINK_COPIED.items()
-        for f in fields
-    }
-
-
-def _mapping(properties: dict) -> dict:
-    return {"dynamic": "strict", "properties": properties}
-
-
-def s2_copy_properties() -> dict:
-    return {f"parent_{f}": copy.deepcopy(FIELD_TYPES[f]) for f in S2_COPIED}
-
-
-def entity_mappings(strategy: str) -> dict[str, dict]:
-    """
-    Strategies:
-        s1: one index per entity; children hold their parent's key
-        s2: parent fields copied onto children, stored as parent_<field>
-        s3: children live inside their parents
-        s4: indexes created in lookup mode
-    """
-    if strategy not in STRATEGIES:
-        raise ValueError(f"unknown strategy {strategy!r}")
-    if strategy in ("s1", "s4"):
-        return {e: _mapping(_properties(f)) for e, f in ENTITY_FIELDS.items()}
-    if strategy == "s2":
-        out = {e: _mapping(_properties(f)) for e, f in ENTITY_FIELDS.items()}
+def entity_mappings(layout: str) -> dict[str, dict]:
+    if layout not in LAYOUTS:
+        raise ValueError(f"unknown layout {layout!r}")
+    props = {e: _properties(f) for e, f in ENTITY_FIELDS.items()}
+    if layout == "s2":
+        parent = {f"parent_{k}": v for k, v in _properties(S2_COPIED).items()}
         for child in ("comment", "review"):
-            out[child]["properties"].update(s2_copy_properties())
-        out["link"]["properties"].update(s2_link_copy_properties())
-        return out
-    if strategy == "s3":
-        comments = {
+            props[child] |= parent
+        props["link"] |= {
+            f"{p}_{k}": v
+            for p, fields in S2_LINK_COPIED.items()
+            for k, v in _properties(fields).items()
+        }
+    elif layout == "s3":
+        nested = {
+            f"{e}s": {"type": "nested", "properties": props.pop(e)}
+            for e in ("comment", "review", "link")
+        }
+        props["issue"]["comments"] = {
             "type": "nested",
             "properties": _properties(ENTITY_FIELDS["comment"]),
         }
-        reviews = {"type": "nested", "properties": _properties(ENTITY_FIELDS["review"])}
-        links = {"type": "nested", "properties": _properties(ENTITY_FIELDS["link"])}
-        pr = _properties(ENTITY_FIELDS["pull_request"]) | {
-            "comments": comments,
-            "reviews": reviews,
-            "links": links,
-        }
-        issue = _properties(ENTITY_FIELDS["issue"]) | {
-            "comments": copy.deepcopy(comments)
-        }  # deepcopy to avoid sharing the same object between issue and pr
-        return {
-            "repository": _mapping(_properties(ENTITY_FIELDS["repository"])),
-            "person": _mapping(_properties(ENTITY_FIELDS["person"])),
-            "issue": _mapping(issue),
-            "pull_request": _mapping(pr),
-        }
+        props["pull_request"] |= nested
+    return {e: {"dynamic": "strict", "properties": p} for e, p in props.items()}
 
 
-def index_name(strategy: str, tier: str, entity: str) -> str:
-    return f"{strategy}-{tier}-{entity}"
+def index_name(layout: str, tier: str, entity: str) -> str:
+    return f"{layout}-{tier}-{entity}"
 
 
 def index_definitions(
-    strategy: str, tier: str, shards: int = 1, replicas: int = 0
+    layout: str, tier: str, shards: int = 1, replicas: int = 0
 ) -> dict[str, dict]:
     out = {}
-    for entity, mapping in entity_mappings(strategy).items():
-        if strategy == "s4" and entity in LOOKUP_INDEXES:
-            settings = {"index": {"mode": "lookup", "number_of_replicas": replicas}}
-        else:
-            settings = {
-                "index": {"number_of_shards": shards, "number_of_replicas": replicas}
-            }
-        out[index_name(strategy, tier, entity)] = {
-            "settings": settings,
+    for entity, mapping in entity_mappings(layout).items():
+        # Lookup mode fixes a single shard, so `shards` does not apply
+        mode = (
+            {"mode": "lookup"}
+            if layout == "s4" and entity in LOOKUP_INDEXES
+            else {"number_of_shards": shards}
+        )
+        out[index_name(layout, tier, entity)] = {
+            "settings": {"index": mode | {"number_of_replicas": replicas}},
             "mappings": mapping,
         }
     return out

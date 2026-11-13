@@ -1,92 +1,68 @@
-"""Transform step 3: keep the five event types and reject malformed events."""
+"""Transform step 3: reject malformed and duplicate events"""
 
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 _COMMON = ["id", "created_at", "actor.id", "actor.login", "repo.id", "repo.name"]
+_ISSUE = ["payload.issue.number", "payload.issue.user.id", "payload.issue.created_at"]
+_PR = ["payload.pull_request.user.id", "payload.pull_request.created_at"]
+_PR_REF = ["payload.pull_request.number", *_PR]
+_COMMENT = [
+    "payload.comment.id",
+    "payload.comment.user.id",
+    "payload.comment.created_at",
+]
 
 REQUIRED: dict[str, list[str]] = {
-    "IssuesEvent": [
-        "payload.action",
-        "payload.issue.number",
-        "payload.issue.user.id",
-        "payload.issue.created_at",
-    ],
-    "PullRequestEvent": [
-        "payload.action",
-        "payload.number",
-        "payload.pull_request.user.id",
-        "payload.pull_request.created_at",
-    ],
-    "IssueCommentEvent": [
-        "payload.issue.number",
-        "payload.issue.user.id",
-        "payload.issue.created_at",
-        "payload.comment.id",
-        "payload.comment.user.id",
-        "payload.comment.created_at",
-    ],
+    "IssuesEvent": [*_COMMON, "payload.action", *_ISSUE],
+    "PullRequestEvent": [*_COMMON, "payload.action", "payload.number", *_PR],
+    "IssueCommentEvent": [*_COMMON, *_ISSUE, *_COMMENT],
     "PullRequestReviewEvent": [
-        "payload.pull_request.number",
-        "payload.pull_request.user.id",
-        "payload.pull_request.created_at",
+        *_COMMON,
+        *_PR_REF,
         "payload.review.id",
         "payload.review.user.id",
         "payload.review.submitted_at",
     ],
-    "PullRequestReviewCommentEvent": [
-        "payload.pull_request.number",
-        "payload.pull_request.user.id",
-        "payload.pull_request.created_at",
-        "payload.comment.id",
-        "payload.comment.user.id",
-        "payload.comment.created_at",
-    ],
+    "PullRequestReviewCommentEvent": [*_COMMON, *_PR_REF, *_COMMENT],
 }
 
-_MISSING = object()
 
-
-def get(obj: Any, dotted: str, default: Any = None) -> Any:
+def get(obj: Any, dotted: str) -> Any:
     for key in dotted.split("."):
-        if not isinstance(obj, dict) or key not in obj:
-            return default
-        obj = obj[key]
+        obj = obj.get(key) if isinstance(obj, dict) else None
     return obj
 
 
-def parse_ts(value: str) -> datetime:
-    return datetime.strptime(value, TS_FORMAT)
-
-
 def check(event: dict) -> str | None:
-    t = event.get("type")
+    """Why `event` is unusable, or None. `event["type"]` must be a key of REQUIRED."""
     if not event.get("payload"):
         return "empty payload"
-    for path in _COMMON + REQUIRED[t]:
-        value = get(event, path, _MISSING)
-        if value is _MISSING or value is None:
+    for path in REQUIRED[event["type"]]:
+        if (value := get(event, path)) is None:
             return f"missing {path}"
         if path.endswith(("created_at", "submitted_at")):
+            # Exactly this format: timestamps are later compared as strings
             try:
-                parse_ts(value)
+                datetime.strptime(value, TS_FORMAT)
             except TypeError, ValueError:
                 return f"bad timestamp {path}"
     return None
 
 
+@dataclass
 class Validator:
-    """Applies `check` plus duplicate detection. Counts every rejection reason."""
+    """`check` plus duplicate detection. Every accepted id is held for the whole run."""
 
-    def __init__(self) -> None:
-        self.seen_ids: set[str] = set()
-        self.rejected: Counter[str] = Counter()
-        self.accepted = 0
+    seen_ids: set[str] = field(default_factory=set)
+    rejected: Counter[str] = field(default_factory=Counter)
+    accepted: int = 0
 
     def __call__(self, event: dict) -> bool:
         reason = check(event)

@@ -1,4 +1,8 @@
-"""Transform step 5: Add PR-to-issue links from closing keywords"""
+"""Transform step 5: link PRs to the issues their body closes
+
+A closing reference is a GitHub closing keyword (close, fix, resolve and their
+forms) followed by an issue reference.
+"""
 
 from __future__ import annotations
 
@@ -17,6 +21,7 @@ KEYWORDS = {
     "resolved": "resolve",
 }
 
+# A keyword followed by #N, owner/repo#N, or an issue or PR URL
 _LINK = re.compile(
     r"(?<![\w-])(?P<kw>close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*"
     r"(?:"
@@ -41,6 +46,11 @@ def find_references(body: str | None) -> list[tuple[str, str | None, int]]:
 
 
 def add_links(folder) -> dict:
+    """Add a link for each number a PR body closes in its own repository.
+
+    Run only once every event is folded: a link's target_type depends on which issues
+    and PRs exist. Cross-repository and self references are skipped.
+    """
     repo_names = {
         rid: r.get("name", "").lower()
         for rid, r in folder.records["repository"].items()
