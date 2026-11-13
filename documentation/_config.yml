@@ -30,8 +30,8 @@ defaults:
     values: { title: "Profile", nav_order: 3 }
   - scope: { path: "tutorial.md" }
     values: { title: "Tutorial", nav_order: 4 }
-  - scope: { path: "references.md" }
-    values: { title: "References", nav_order: 5 }
+  - scope: { path: "reference.md" }
+    values: { title: "Reference", nav_order: 5 }
 
 callouts:
   note:
