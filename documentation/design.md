@@ -12,7 +12,7 @@ The diagram shows how the components fit together. Its numbered steps follow the
 
 <img alt="Architecture" src="assets/images/architecture.png" width="900">
 
-## Profiling
+## Profile
 
 Before any components were written, preliminary experiments were run on the GH Archive dataset using Google BigQuery. Targeted SQL queries profiled the shape of the 2024 data: how many events there are and how large they are, how unevenly activity is spread across repositories, and how much of it comes from bots or throwaway repositories. This profiling is the foundation for several design decisions, from the size of each data tier to the rules that filter repositories. The full analysis is on the [Profile](profile.md) page, and the SQL queries are in `ingest/profile/`. BigQuery's sandbox includes 1 TB of free queries per month, which was enough for this work.
 
