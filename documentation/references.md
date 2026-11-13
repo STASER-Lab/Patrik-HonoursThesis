@@ -1,4 +1,4 @@
-# References
+# Reference
 
 Informal references for the tools, data and examples used in this documentation and project, along with the conventions the code follows.
 
