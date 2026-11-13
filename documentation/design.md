@@ -23,7 +23,7 @@ This research uses GH Archive data from 2024 and the start of 2025 because on Oc
 
 ## Ingest
 
-With the dataset profiled, the ingest component was built as an ETL (extract, transform and load) process. It follows the [Medallion Architecture](https://www.databricks.com/glossary/medallion-architecture), where data moves through three layers of increasing quality, as labelled on the ingest stages in the architecture diagram: bronze (the raw hourly files in `data/raw/`), silver (the cleaned records in `data/records/`) and gold (the per-layout bulk files in `data/bulk/`). Every layer is written to disk, so each stage can be re-run or inspected on its own.
+With the dataset profiled, the ingest component was built as an ETL (extract, transform and load) process. It follows a [medallion architecture](https://www.databricks.com/glossary/medallion-architecture), where data moves through three layers of increasing quality, as labelled on the ingest stages in the architecture diagram: bronze (the raw hourly files in `data/raw/`), silver (the cleaned records in `data/records/`) and gold (the per-layout bulk files in `data/bulk/`). Every layer is written to disk, so each stage can be re-run or inspected on its own.
 
 ### Select
 
