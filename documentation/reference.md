@@ -21,7 +21,7 @@ Informal references for the tools, data and examples used in this documentation 
 | [Elastic Cloud on Kubernetes (ECK)](https://www.elastic.co/docs/deploy-manage/deploy/cloud-on-k8s) | Running Elasticsearch on the cluster |
 | [k3s](https://k3s.io/) | Lightweight Kubernetes |
 | [OpenTofu](https://opentofu.org/) | Creating the cluster's machines on Arbutus |
-| [Medallion Architecture](https://www.databricks.com/glossary/medallion-architecture) | The bronze, silver and gold layers of the ingest process |
+| [medallion architecture](https://www.databricks.com/glossary/medallion-architecture) | The bronze, silver and gold layers of the ingest process |
 | [Just the Docs](https://just-the-docs.com/) | This documentation site |
 | [Ruff](https://docs.astral.sh/ruff/) | Python formatting and linting |
 
@@ -57,9 +57,3 @@ Informal references for the tools, data and examples used in this documentation 
 ## AI assistants
 
 Claude is primarily used outside of the codebase to generate code, refactor and debug. Other LLMs, such as ChatGPT and Gemini, are sometimes used to review code. All AI-assisted work is reviewed and tested before it is committed, and code that affects results is checked against the Python reference answers. The research decisions, and responsibility for all content, remain with the author.
-
-## Other decisions
-
-**Kubernetes over Docker.** The original plan was Docker Compose. Kubernetes (k3s with ECK) lets one control machine manage every node, which makes the cluster easier to configure and resize between experiments. See [Cluster](design.md#cluster-under-construction).
-
-**Repository filtering.** Based on the BigQuery profile, a repository is kept only if it has at least 3 distinct accounts, no single account makes more than 80% of its events, and it averages at most 1,000 events per account. See [Profiling](design.md#profiling).
