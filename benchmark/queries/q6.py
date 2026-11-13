@@ -1,62 +1,91 @@
-"""Q6: share of PRs merged in the window whose body closes at least one issue"""
+"""Q6: share of issues closed in the window that a merged PR's closing keyword
+targets, and the median time from the issue opening to that PR's merge
+
+The merge itself may fall outside the window.
+"""
 
 from __future__ import annotations
+
+import statistics
 
 from .common import (
     WINDOW_END,
     WINDOW_START,
     esql_rows,
-    idx,
     in_window,
+    index_name,
+    keep_earliest,
     search_all,
+    share,
     window_filter,
 )
+from .contributors import epoch
 
 
-def _answer(merged: int, closing: int) -> dict:
+def _format(closed_count: int, times: list[int]) -> dict:
     return {
-        "merged": merged,
-        "closing": closing,
-        "share": round(closing / merged, 4) if merged else None,
+        "closed": closed_count,
+        "via_pr": len(times),
+        "share": share(len(times), closed_count),
+        "median_seconds_to_merge": statistics.median(times) if times else None,
     }
+
+
+def _answer(closed: dict, first_merge: dict) -> dict:
+    times = [
+        first_merge[k] - created for k, created in closed.items() if k in first_merge
+    ]
+    return _format(len(closed), times)
 
 
 def reference(data, repo_id: int) -> dict:
+    closed = {
+        i["issue_key"]: epoch(i["created_at"])
+        for i in data.records("issue", repo_id)
+        if in_window(i["closed_at"])
+    }
     merged = {
-        p["pr_key"]
+        p["pr_key"]: epoch(p["merged_at"])
         for p in data.records("pull_request", repo_id)
-        if in_window(p["merged_at"])
+        if p["merged_at"]
     }
-    closing = {
-        ln["pr_key"]
-        for ln in data.records("link", repo_id)
-        if ln["target_type"] == "issue" and ln["pr_key"] in merged
-    }
-    return _answer(len(merged), len(closing))
+    first: dict = {}
+    for ln in data.records("link", repo_id):
+        if (
+            ln["target_type"] == "issue"
+            and ln["issue_key"] in closed
+            and ln["pr_key"] in merged
+        ):
+            keep_earliest(first, ln["issue_key"], merged[ln["pr_key"]])
+    return _answer(closed, first)
 
 
 def informative(answer: dict) -> bool:
-    return answer["closing"] > 0
+    return answer["via_pr"] > 0
 
 
-def _merged_filter(repo_id: int) -> dict:
+def _closed_issues(es, layout, tier, repo_id):
+    hits, n = search_all(
+        es,
+        index_name(layout, tier, "issue"),
+        {
+            "bool": {
+                "filter": [{"term": {"repo_id": repo_id}}, window_filter("closed_at")]
+            }
+        },
+        ["issue_key", "created_at"],
+        "issue_key",
+    )
     return {
-        "bool": {"filter": [{"term": {"repo_id": repo_id}}, window_filter("merged_at")]}
-    }
+        s["issue_key"]: epoch(s["created_at"]) for h in hits if (s := h["_source"])
+    }, n
 
 
 def s1(es, tier, repo_id):
-    prs, n1 = search_all(
-        es,
-        idx("s1", tier, "pull_request"),
-        _merged_filter(repo_id),
-        ["pr_key"],
-        "pr_key",
-    )
-    merged = {h["_source"]["pr_key"] for h in prs}
+    closed, n1 = _closed_issues(es, "s1", tier, repo_id)
     links, n2 = search_all(
         es,
-        idx("s1", tier, "link"),
+        index_name("s1", tier, "link"),
         {
             "bool": {
                 "filter": [
@@ -65,85 +94,134 @@ def s1(es, tier, repo_id):
                 ]
             }
         },
-        ["pr_key"],
+        ["pr_key", "issue_key"],
         "link_key",
     )
-    closing = {h["_source"]["pr_key"] for h in links} & merged
-    return _answer(len(merged), len(closing)), n1 + n2
+    prs, n3 = search_all(
+        es,
+        index_name("s1", tier, "pull_request"),
+        {
+            "bool": {
+                "filter": [{"term": {"repo_id": repo_id}}, {"term": {"merged": True}}]
+            }
+        },
+        ["pr_key", "merged_at"],
+        "pr_key",
+    )
+    merged = {h["_source"]["pr_key"]: epoch(h["_source"]["merged_at"]) for h in prs}
+    first: dict = {}
+    for h in links:
+        ln = h["_source"]
+        if ln["issue_key"] in closed and ln["pr_key"] in merged:
+            keep_earliest(first, ln["issue_key"], merged[ln["pr_key"]])
+    return _answer(closed, first), n1 + n2 + n3
 
 
 def s2(es, tier, repo_id):
-    pr_idx, link_idx = idx("s2", tier, "pull_request"), idx("s2", tier, "link")
+    issue_idx = index_name("s2", tier, "issue")
+    link_idx = index_name("s2", tier, "link")
     resp = es.search(
-        index=f"{pr_idx},{link_idx}",
+        index=f"{issue_idx},{link_idx}",
         size=0,
         query={"term": {"repo_id": repo_id}},
         aggs={
-            "merged": {
+            "closed": {
                 "filter": {
                     "bool": {
                         "filter": [
-                            {"term": {"_index": pr_idx}},
-                            window_filter("merged_at"),
+                            {"term": {"_index": issue_idx}},
+                            window_filter("closed_at"),
                         ]
                     }
                 }
             },
-            "closing": {
+            "via_pr": {
                 "filter": {
                     "bool": {
                         "filter": [
                             {"term": {"_index": link_idx}},
                             {"term": {"target_type": "issue"}},
-                            window_filter("pr_merged_at"),
+                            {"term": {"pr_merged": True}},
+                            window_filter("issue_closed_at"),
                         ]
                     }
                 },
-                "aggs": {"prs": {"terms": {"field": "pr_key", "size": 65_000}}},
+                "aggs": {
+                    "issues": {
+                        # Kept under search.max_buckets (65,536). A repository with more
+                        # matching keys would be undercounted
+                        "terms": {"field": "issue_key", "size": 65_000},
+                        "aggs": {
+                            "merge": {"min": {"field": "pr_merged_at"}},
+                            "opened": {"min": {"field": "issue_created_at"}},
+                        },
+                    }
+                },
             },
         },
     )
     a = resp["aggregations"]
-    return _answer(a["merged"]["doc_count"], len(a["closing"]["prs"]["buckets"])), 1
+    times = [
+        epoch(b["merge"]["value"]) - epoch(b["opened"]["value"])
+        for b in a["via_pr"]["issues"]["buckets"]
+    ]
+    return _format(a["closed"]["doc_count"], times), 1
 
 
 def s3(es, tier, repo_id):
-    resp = es.search(
-        index=idx("s3", tier, "pull_request"),
-        size=0,
-        track_total_hits=True,
-        query=_merged_filter(repo_id),
-        aggs={
-            "closing": {
-                "filter": {
-                    "nested": {
-                        "path": "links",
-                        "query": {"term": {"links.target_type": "issue"}},
-                    }
-                }
+    closed, n1 = _closed_issues(es, "s3", tier, repo_id)
+    hits, n2 = search_all(
+        es,
+        index_name("s3", tier, "pull_request"),
+        {
+            "bool": {
+                "filter": [
+                    {"term": {"repo_id": repo_id}},
+                    {"term": {"merged": True}},
+                    {
+                        "nested": {
+                            "path": "links",
+                            "query": {"term": {"links.target_type": "issue"}},
+                        }
+                    },
+                ]
             }
         },
+        ["pr_key", "merged_at", "links.issue_key", "links.target_type"],
+        "pr_key",
     )
-    merged = resp["hits"]["total"]["value"]
-    return _answer(merged, resp["aggregations"]["closing"]["doc_count"]), 1
+    first: dict = {}
+    for h in hits:
+        pr = h["_source"]
+        for ln in pr.get("links", ()):
+            if ln["target_type"] == "issue" and ln["issue_key"] in closed:
+                keep_earliest(first, ln["issue_key"], epoch(pr["merged_at"]))
+    return _answer(closed, first), n1 + n2
 
 
 def s4(es, tier, repo_id):
-    pr, link = idx("s4", tier, "pull_request"), idx("s4", tier, "link")
+    issue, link, pr = (
+        index_name("s4", tier, e) for e in ("issue", "link", "pull_request")
+    )
+    # Links to PRs and unmerged PRs give a null merge, which MIN ignores
     rows = esql_rows(
         es,
         f"""
-        FROM {pr}
+        FROM {issue}
         | WHERE repo_id == {int(repo_id)}
-          AND merged_at >= TO_DATETIME("{WINDOW_START}")
-          AND merged_at < TO_DATETIME("{WINDOW_END}")
-        | KEEP pr_key
-        | LOOKUP JOIN {link} ON pr_key
-        | EVAL closes = CASE(target_type == "issue", 1, 0)
-        | STATS closes = MAX(closes) BY pr_key
-        | STATS merged = COUNT(*), closing = SUM(closes)
+          AND closed_at >= TO_DATETIME("{WINDOW_START}")
+          AND closed_at < TO_DATETIME("{WINDOW_END}")
+        | KEEP issue_key, created_at
+        | RENAME created_at AS opened_at
+        | LOOKUP JOIN {link} ON issue_key
+        | KEEP issue_key, opened_at, pr_key, target_type
+        | LOOKUP JOIN {pr} ON pr_key
+        | EVAL merge = CASE(target_type == "issue" AND merged_at IS NOT NULL, merged_at)
+        | STATS first_merge = MIN(merge) BY issue_key, opened_at
+        | EVAL seconds = DATE_DIFF("seconds", opened_at, first_merge)
+        | KEEP issue_key, seconds
         | LIMIT 10000""",
     )
-    if not rows or not rows[0]["merged"]:
-        return _answer(0, 0), 1
-    return _answer(rows[0]["merged"], rows[0]["closing"]), 1
+    return _format(
+        len(rows), [r["seconds"] for r in rows if r["seconds"] is not None]
+    ), 1

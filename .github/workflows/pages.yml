@@ -1,6 +1,4 @@
-# Builds the Just the Docs site from documentation/ and publishes it to GitHub Pages
-# Based on https://github.com/just-the-docs/just-the-docs-template
-name: Deploy docs to GitHub Pages
+name: Build and Deploy Documentation
 
 on:
   push:

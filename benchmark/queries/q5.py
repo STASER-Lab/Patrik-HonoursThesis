@@ -1,228 +1,78 @@
-"""Q5: share of issues closed in the window that a merged PR's closing keyword targets,
-and the median time from issue opened to the first such merge"""
+"""Q5: per monthly cohort of first-time contributors, the share active again within
+90 days
+"""
 
 from __future__ import annotations
 
-import statistics
+from collections import Counter
+from datetime import UTC, datetime
 
-from .activity import epoch
-from .common import (
-    WINDOW_END,
-    WINDOW_START,
-    esql_rows,
-    idx,
-    in_window,
-    search_all,
-    window_filter,
-)
+from . import contributors
+from .common import WINDOW_END, WINDOW_START, esql_rows, index_name, share
+
+LAST_COHORT = "2024-09"  # the last cohort whose 90-day follow-up ends within 2024
+FOLLOW_UP = 90 * 86_400
+
+informative = bool
 
 
-def _answer(closed: dict, first_merge: dict) -> dict:
-    times = [
-        first_merge[k] - created for k, created in closed.items() if k in first_merge
-    ]
+def _row(newcomers: int, returned: int) -> dict:
     return {
-        "closed": len(closed),
-        "via_pr": len(times),
-        "share": round(len(times) / len(closed), 4) if closed else None,
-        "median_seconds_to_merge": statistics.median(times) if times else None,
+        "newcomers": newcomers,
+        "returned": returned,
+        "share": share(returned, newcomers),
     }
 
 
-def _min_into(d: dict, k, v) -> None:
-    if k not in d or v < d[k]:
-        d[k] = v
+def _cohorts(times: dict) -> dict:
+    newcomers, returned = Counter(), Counter()
+    for ts in times.values():
+        cohort = datetime.fromtimestamp(ts[0], UTC).strftime("%Y-%m")
+        if cohort <= LAST_COHORT:
+            newcomers[cohort] += 1
+            returned[cohort] += len(ts) > 1 and ts[1] <= ts[0] + FOLLOW_UP
+    return {m: _row(n, returned[m]) for m, n in sorted(newcomers.items())}
 
 
 def reference(data, repo_id: int) -> dict:
-    closed = {
-        i["issue_key"]: epoch(i["created_at"])
-        for i in data.records("issue", repo_id)
-        if in_window(i["closed_at"])
-    }
-    merged = {
-        p["pr_key"]: epoch(p["merged_at"])
-        for p in data.records("pull_request", repo_id)
-        if p["merged_at"]
-    }
-    first: dict = {}
-    for ln in data.records("link", repo_id):
-        if (
-            ln["target_type"] == "issue"
-            and ln["issue_key"] in closed
-            and ln["pr_key"] in merged
-        ):
-            _min_into(first, ln["issue_key"], merged[ln["pr_key"]])
-    return _answer(closed, first)
-
-
-def informative(answer: dict) -> bool:
-    return answer["via_pr"] > 0
-
-
-def _closed_issues(es, strategy, tier, repo_id):
-    hits, n = search_all(
-        es,
-        idx(strategy, tier, "issue"),
-        {
-            "bool": {
-                "filter": [{"term": {"repo_id": repo_id}}, window_filter("closed_at")]
-            }
-        },
-        ["issue_key", "created_at"],
-        "issue_key",
-    )
-    return {
-        h["_source"]["issue_key"]: epoch(h["_source"]["created_at"]) for h in hits
-    }, n
+    return _cohorts(contributors.reference(data, repo_id))
 
 
 def s1(es, tier, repo_id):
-    closed, n1 = _closed_issues(es, "s1", tier, repo_id)
-    links, n2 = search_all(
-        es,
-        idx("s1", tier, "link"),
-        {
-            "bool": {
-                "filter": [
-                    {"term": {"repo_id": repo_id}},
-                    {"term": {"target_type": "issue"}},
-                ]
-            }
-        },
-        ["pr_key", "issue_key"],
-        "link_key",
-    )
-    prs, n3 = search_all(
-        es,
-        idx("s1", tier, "pull_request"),
-        {
-            "bool": {
-                "filter": [{"term": {"repo_id": repo_id}}, {"term": {"merged": True}}]
-            }
-        },
-        ["pr_key", "merged_at"],
-        "pr_key",
-    )
-    merged = {h["_source"]["pr_key"]: epoch(h["_source"]["merged_at"]) for h in prs}
-    first: dict = {}
-    for h in links:
-        ln = h["_source"]
-        if ln["issue_key"] in closed and ln["pr_key"] in merged:
-            _min_into(first, ln["issue_key"], merged[ln["pr_key"]])
-    return _answer(closed, first), n1 + n2 + n3
+    times, n = contributors.flat_indexes(es, "s1", tier, repo_id)
+    return _cohorts(times), n
 
 
 def s2(es, tier, repo_id):
-    issue_idx, link_idx = idx("s2", tier, "issue"), idx("s2", tier, "link")
-    resp = es.search(
-        index=f"{issue_idx},{link_idx}",
-        size=0,
-        query={"term": {"repo_id": repo_id}},
-        aggs={
-            "closed": {
-                "filter": {
-                    "bool": {
-                        "filter": [
-                            {"term": {"_index": issue_idx}},
-                            window_filter("closed_at"),
-                        ]
-                    }
-                }
-            },
-            "via_pr": {
-                "filter": {
-                    "bool": {
-                        "filter": [
-                            {"term": {"_index": link_idx}},
-                            {"term": {"target_type": "issue"}},
-                            {"term": {"pr_merged": True}},
-                            window_filter("issue_closed_at"),
-                        ]
-                    }
-                },
-                "aggs": {
-                    "issues": {
-                        "terms": {"field": "issue_key", "size": 65_000},
-                        "aggs": {
-                            "merge": {"min": {"field": "pr_merged_at"}},
-                            "opened": {"min": {"field": "issue_created_at"}},
-                        },
-                    }
-                },
-            },
-        },
-    )
-    a = resp["aggregations"]
-    times = [
-        int((b["merge"]["value"] - b["opened"]["value"]) // 1000)
-        for b in a["via_pr"]["issues"]["buckets"]
-    ]
-    n = a["closed"]["doc_count"]
-    return {
-        "closed": n,
-        "via_pr": len(times),
-        "share": round(len(times) / n, 4) if n else None,
-        "median_seconds_to_merge": statistics.median(times) if times else None,
-    }, 1
+    times, n = contributors.flat_indexes(es, "s2", tier, repo_id)
+    return _cohorts(times), n
 
 
 def s3(es, tier, repo_id):
-    closed, n1 = _closed_issues(es, "s3", tier, repo_id)
-    hits, n2 = search_all(
-        es,
-        idx("s3", tier, "pull_request"),
-        {
-            "bool": {
-                "filter": [
-                    {"term": {"repo_id": repo_id}},
-                    {"term": {"merged": True}},
-                    {
-                        "nested": {
-                            "path": "links",
-                            "query": {"term": {"links.target_type": "issue"}},
-                        }
-                    },
-                ]
-            }
-        },
-        ["pr_key", "merged_at", "links.issue_key", "links.target_type"],
-        "pr_key",
-    )
-    first: dict = {}
-    for h in hits:
-        pr = h["_source"]
-        for ln in pr.get("links", []):
-            if ln["target_type"] == "issue" and ln["issue_key"] in closed:
-                _min_into(first, ln["issue_key"], epoch(pr["merged_at"]))
-    return _answer(closed, first), n1 + n2
+    times, n = contributors.nested(es, tier, repo_id)
+    return _cohorts(times), n
 
 
 def s4(es, tier, repo_id):
-    issue, link, pr = (idx("s4", tier, e) for e in ("issue", "link", "pull_request"))
+    indices = ",".join(
+        index_name("s4", tier, e)
+        for e in ("issue", "pull_request", "comment", "review")
+    )
     rows = esql_rows(
         es,
         f"""
-        FROM {issue}
-        | WHERE repo_id == {int(repo_id)}
-          AND closed_at >= TO_DATETIME("{WINDOW_START}") AND
-        closed_at < TO_DATETIME("{WINDOW_END}")
-        | KEEP issue_key, created_at
-        | RENAME created_at AS opened_at
-        | LOOKUP JOIN {link} ON issue_key
-        | KEEP issue_key, opened_at, pr_key, target_type
-        | LOOKUP JOIN {pr} ON pr_key
-        | EVAL merge = CASE(target_type == "issue" AND
-        merged_at IS NOT NULL, merged_at)
-        | STATS first_merge = MIN(merge) BY issue_key, opened_at
-        | EVAL seconds = DATE_DIFF("seconds", opened_at, first_merge)
-        | KEEP issue_key, seconds
+        FROM {indices}
+        | WHERE repo_id == {int(repo_id)} AND author_is_bot == false
+        | EVAL t = COALESCE(created_at, submitted_at)
+        | WHERE t >= TO_DATETIME("{WINDOW_START}") AND t < TO_DATETIME("{WINDOW_END}")
+        | KEEP author_id, t
+        | INLINE STATS first_at = MIN(t) BY author_id
+        | EVAL again = CASE(t > first_at AND t <= first_at + 90 days, 1, 0)
+        | STATS came_back = MAX(again) BY author_id, first_at
+        | EVAL cohort = DATE_FORMAT("yyyy-MM", first_at)
+        | WHERE cohort <= "{LAST_COHORT}"
+        | STATS newcomers = COUNT(*), returned = SUM(came_back) BY cohort
+        | SORT cohort
         | LIMIT 10000""",
     )
-    times = [r["seconds"] for r in rows if r["seconds"] is not None]
-    return {
-        "closed": len(rows),
-        "via_pr": len(times),
-        "share": round(len(times) / len(rows), 4) if rows else None,
-        "median_seconds_to_merge": statistics.median(times) if times else None,
-    }, 1
+    return {r["cohort"]: _row(r["newcomers"], r["returned"]) for r in rows}, 1

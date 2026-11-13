@@ -5,26 +5,18 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "Patrik-HonoursThesis"
 version = "0.1.0"
-description = "evaluating-elasticsearch-storage-architectures-for-open-source-repository-activity-at-scale"
+description = "Evaluating distributed document layouts for software repository activity"
 requires-python = ">=3.14"
 dependencies = ["elasticsearch>=9,<10"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "ruff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-[tool.setuptools]
-py-modules = []
-
-[tool.ruff]
-line-length = 88
-target-version = "py314"
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
+[tool.setuptools.packages.find]
+include = ["ingest*", "benchmark*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

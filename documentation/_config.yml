@@ -1,14 +1,18 @@
 title: Documentation
-description: Evaluating Elasticsearch storage architectures for open source repository activity at scale
+description: Evaluating distributed document layouts for software repository activity
 theme: just-the-docs
 color_scheme: staser
 
-logo: "/STASER_logo.png"
+logo: "/assets/images/staser-logo.png"
+favicon_ico: "/assets/images/favicon.ico"
 search_enabled: true
 
 aux_links:
   "GitHub repository": "https://github.com/STASER-Lab/Patrik-HonoursThesis"
 aux_links_new_tab: true
+
+sass:
+  silence_deprecations: ["import", "global-builtin", "color-functions"]
 
 plugins:
   - jekyll-optional-front-matter
@@ -20,27 +24,14 @@ relative_links:
 defaults:
   - scope: { path: "" }
     values: { layout: "default" }
-  - scope: { path: "requirements.md" }
-    values: { title: "Requirements", nav_order: 2 }
   - scope: { path: "design.md" }
-    values: { title: "Design (TBC)", nav_order: 3 }
-  # TBC: Finish writing the following documentation
-  #- scope: { path: "components/extract.md" }
-  #  values: { title: "Extract", parent: "Design", nav_order: 1 }
-  #- scope: { path: "components/transform.md" }
-  #  values: { title: "Transform", parent: "Design", nav_order: 2 }
-  #- scope: { path: "components/load.md" }
-  #  values: { title: "Load", parent: "Design", nav_order: 3 }
-  #- scope: { path: "components/model.md" }
-  #  values: { title: "Model", parent: "Design", nav_order: 4 }
-  #- scope: { path: "components/cluster.md" }
-  #  values: { title: "Cluster", parent: "Design", nav_order: 5 }
-  #- scope: { path: "components/test.md" }
-  #  values: { title: "Test", parent: "Design", nav_order: 6 }
-  - scope: { path: "about.md" }
-    values: { title: "About", nav_order: 6 }
+    values: { title: "Design", nav_order: 2 }
+  - scope: { path: "profile.md" }
+    values: { title: "Profile", nav_order: 3 }
+  - scope: { path: "tutorial.md" }
+    values: { title: "Tutorial", nav_order: 4 }
   - scope: { path: "references.md" }
-    values: { title: "References", nav_order: 7 }
+    values: { title: "References", nav_order: 5 }
 
 callouts:
   note:
@@ -55,13 +46,3 @@ exclude:
   - Gemfile.lock
   - vendor/
   - .bundle/
-  - AI_LOG.md
-  - decisions.md
-  - data-profile-2024.md
-  - record-model.md
-  - mappings.md
-  - pipeline/extract.md
-  - pipeline/transform.md
-  - pipeline/load.md
-  - pipeline/model.md
-  - pipeline/test.md
