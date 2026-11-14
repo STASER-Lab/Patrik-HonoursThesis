@@ -1,0 +1,30 @@
+#cloud-config
+# First-boot setup for every VM.
+# Changes to user-data may require VM replacement.
+
+# 1. Operating system updates
+package_update: true
+package_upgrade: true
+package_reboot_if_required: true
+
+# 2. Elasticsearch kernel configuration
+write_files:
+  - path: /etc/sysctl.d/99-elasticsearch.conf
+    content: |
+      vm.max_map_count = 262144
+
+
+# 3. Format the OpenStack ephemeral disk
+# WARNING: overwrite: true destroys existing filesystem data.
+fs_setup:
+  - label: data
+    device: ephemeral0
+    filesystem: ext4
+    overwrite: true
+
+mounts:
+  - [ephemeral0, /data, ext4, "defaults,noatime,nofail", "0", "2"]
+
+# 4. Mount ephemeral storage at /data
+runcmd:
+  - sysctl --system
