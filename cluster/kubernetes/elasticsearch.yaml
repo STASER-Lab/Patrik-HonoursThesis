@@ -1,0 +1,43 @@
+# The experiment Elasticsearch cluster, managed by the ECK operator.
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: hons
+spec:
+  version: 9.5.4
+  nodeSets:
+    - name: data
+      count: 4
+      podTemplate:
+        spec:
+          nodeSelector:
+            role: es-data
+          tolerations:
+            - key: dedicated
+              operator: Equal
+              value: elasticsearch
+              effect: NoSchedule
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      elasticsearch.k8s.elastic.co/cluster-name: hons
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - name: elasticsearch
+              resources:
+                requests:
+                  memory: 2Gi
+                  cpu: 500m
+                limits:
+                  memory: 2Gi
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            accessModes: [ReadWriteOnce]
+            storageClassName: local-path
+            resources:
+              requests:
+                storage: 20Gi

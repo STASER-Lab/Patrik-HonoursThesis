@@ -3,3 +3,4 @@
 *.yaml linguist-detectable
 *.yml linguist-detectable
 *.sql linguist-detectable
+*.sh linguist-language=Shell linguist-detectable

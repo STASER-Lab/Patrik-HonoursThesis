@@ -1,4 +1,4 @@
-"""Bot detection for GitHub accounts.
+"""Bot detection for GitHub accounts (Citation TBC).
 
 The lists are frozen: changing them changes every tier's records.
 """
