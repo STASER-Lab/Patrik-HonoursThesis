@@ -5,6 +5,7 @@ data/
 
 # Credentials
 *.env
+elastic-start-local/
 clouds.yaml
 *openrc*.sh
 kubeconfig*
