@@ -1,0 +1,5 @@
+*.tf linguist-language=HCL linguist-detectable
+*.tfvars linguist-language=HCL linguist-detectable
+*.yaml linguist-detectable
+*.yml linguist-detectable
+*.sql linguist-detectable
