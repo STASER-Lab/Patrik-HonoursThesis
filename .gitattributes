@@ -1,6 +1,6 @@
-*.tf linguist-language=HCL linguist-detectable
-*.tfvars linguist-language=HCL linguist-detectable
-*.yaml linguist-detectable
-*.yml linguist-detectable
-*.sql linguist-detectable
-*.sh linguist-language=Shell linguist-detectable
+*.tf linguist-language=HCL linguist-detectable=true
+*.tfvars linguist-language=HCL linguist-detectable=true
+*.yaml linguist-language=YAML linguist-detectable=true
+*.yml linguist-language=YAML linguist-detectable=true
+*.sql linguist-language=SQL linguist-detectable=true
+*.sh linguist-language=Shell linguist-detectable=true
