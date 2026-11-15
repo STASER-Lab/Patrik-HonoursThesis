@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "description": "Latency of one repository query on one layout, against an existing cluster",
+  "schedule": [
+    {
+      "operation": {
+        "name": "{{ query | default('q2') }}-{{ layout | default('s1') }}",
+        "operation-type": "layout-query",
+        "query": "{{ query | default('q2') }}",
+        "layout": "{{ layout | default('s1') }}",
+        "tier": "{{ tier | default('dev') }}",
+        "repo_id": {{ repo_id | default(197275551) }}
+      },
+      "clients": {{ clients | default(1) }},
+      "warmup-iterations": {{ warmup | default(5) }},
+      "iterations": {{ iterations | default(20) }}
+    }
+  ]
+}
