@@ -8,6 +8,7 @@ async client.
 
 import asyncio
 import importlib
+import random
 import sys
 from pathlib import Path
 
@@ -58,5 +59,31 @@ async def layout_query(es, params):
     return {"weight": 1, "unit": "ops", "success": True, "requests": requests}
 
 
+class LayoutMix:
+    """Throughput workload: each call picks a random query and repository from the
+    layout's mix. Rally gives every client its own copy (partition), seeded by the
+    repetition and the client number, so every layout gets the same sequence."""
+
+    def __init__(self, track, params, **kwargs):
+        self._params = params
+        self._rng = random.Random(f"{params['seed']}")
+        self.infinite = True
+
+    def partition(self, partition_index, total_partitions):
+        part = LayoutMix(None, self._params)
+        part._rng = random.Random(f"{self._params['seed']}-{partition_index}")
+        return part
+
+    def params(self):
+        pick = self._rng.choice(self._params["mix"])
+        return {
+            "query": pick["query"],
+            "repo_id": pick["repo_id"],
+            "layout": self._params["layout"],
+            "tier": self._params["tier"],
+        }
+
+
 def register(registry):
     registry.register_runner("layout-query", layout_query, async_runner=True)
+    registry.register_param_source("layout-mix", LayoutMix)

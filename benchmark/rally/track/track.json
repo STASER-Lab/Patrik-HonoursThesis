@@ -4,7 +4,7 @@
   "challenges": [
     {
       "name": "latency",
-      "description": "One client. Every verified query, repository and layout, layouts interleaved",
+      "description": "One client. Verified queries, repositories and interleaved layouts",
       "default": true,
       "schedule": [
         {% for c in combos %}
@@ -18,8 +18,30 @@
             "repo_id": {{ c.repo_id }}
           },
           "clients": 1,
-          "warmup-iterations": {{ warmup | default(20) }},
-          "iterations": {{ iterations | default(200) }}
+          "warmup-iterations": {{ warmup }},
+          "iterations": {{ iterations }}
+        }{{ "," if not loop.last }}
+        {% endfor %}
+      ]
+    },
+    {
+      "name": "throughput",
+      "description": "Several clients per layout, each sending a random mix of its verified queries and repositories",
+      "schedule": [
+        {% for layout in layouts %}
+        {
+          "operation": {
+            "name": "mix-{{ layout }}",
+            "operation-type": "layout-query",
+            "param-source": "layout-mix",
+            "layout": "{{ layout }}",
+            "tier": "{{ tier }}",
+            "mix": {{ mix[layout] | tojson }},
+            "seed": {{ seed }}
+          },
+          "clients": {{ clients }},
+          "warmup-time-period": {{ throughput_warmup }},
+          "time-period": {{ throughput_time }}
         }{{ "," if not loop.last }}
         {% endfor %}
       ]

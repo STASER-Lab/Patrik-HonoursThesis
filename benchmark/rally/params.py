@@ -45,12 +45,26 @@ def combinations(
     ]
 
 
+def mixes(combos: list[dict]) -> dict[str, list[dict]]:
+    mix: dict[str, list[dict]] = {}
+    for c in combos:
+        mix.setdefault(c["layout"], []).append(
+            {"query": c["query"], "repo_id": c["repo_id"]}
+        )
+    return mix
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--tier", default="dev")
     p.add_argument("--repetition", type=int, default=0)
     p.add_argument("--results", type=Path, default=RESULTS_DIR)
     p.add_argument("--out", type=Path)
+    p.add_argument("--warmup", type=int, default=20, help="latency warm-up runs")
+    p.add_argument("--iterations", type=int, default=200, help="latency runs")
+    p.add_argument("--clients", type=int, default=8, help="throughput clients")
+    p.add_argument("--throughput-warmup", type=int, default=60, help="seconds")
+    p.add_argument("--throughput-time", type=int, default=180, help="seconds")
     args = p.parse_args(argv)
 
     repos = json.loads(REPOSITORIES_FILE.read_text())[args.tier]["repos"]
@@ -61,9 +75,21 @@ def main(argv: list[str] | None = None) -> int:
 
     out = args.out or Path(f"data/rally/params-{args.tier}-r{args.repetition}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps({"tier": args.tier, "combos": combos}, indent=2))
-    print(f"Verified by {check}")
     order = rotated(LAYOUTS, args.repetition)
+    track_params = {
+        "tier": args.tier,
+        "combos": combos,
+        "layouts": list(order),
+        "mix": mixes(combos),
+        "seed": args.repetition,
+        "warmup": args.warmup,
+        "iterations": args.iterations,
+        "clients": args.clients,
+        "throughput_warmup": args.throughput_warmup,
+        "throughput_time": args.throughput_time,
+    }
+    out.write_text(json.dumps(track_params, indent=2))
+    print(f"Verified by {check}")
     print(f"{len(combos)} combinations, layouts in order {order}")
     if limited:
         print(f"Left out (ES|QL row limit): {limited}")

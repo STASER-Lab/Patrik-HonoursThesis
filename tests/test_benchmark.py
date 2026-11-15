@@ -1,4 +1,6 @@
+import importlib.util
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -397,3 +399,34 @@ def test_rally_refuses_unverified_answers():
     status[("q3", "s2", 1)] = "fail"
     with pytest.raises(SystemExit):
         params.combinations({"small": 1}, status, repetition=0)
+
+
+def test_rally_mix_holds_each_layouts_timed_combinations():
+    status = _status(_rows({"small": 1}))
+    status[("q1", "s4", 1)] = "limit"
+    mix = params.mixes(params.combinations({"small": 1}, status, repetition=0))
+    assert len(mix["s1"]) == 7
+    assert {"query": "q1", "repo_id": 1} not in mix["s4"]
+
+
+def _layout_mix():
+    path = Path(__file__).parents[1] / "benchmark/rally/track/track.py"
+    spec = importlib.util.spec_from_file_location("rally_track", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.LayoutMix
+
+
+def test_rally_mix_is_identical_across_layouts_per_client():
+    LayoutMix = _layout_mix()
+    mix = [{"query": f"q{i}", "repo_id": i} for i in range(1, 8)]
+
+    def picks(layout, client):
+        source = LayoutMix(
+            None, {"mix": mix, "seed": 0, "layout": layout, "tier": "dev"}
+        )
+        part = source.partition(client, 8)
+        return [part.params()["query"] for _ in range(20)]
+
+    assert picks("s1", 3) == picks("s4", 3)
+    assert picks("s1", 3) != picks("s1", 4)
