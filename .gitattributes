@@ -1,6 +1,0 @@
-*.tf linguist-language=HCL linguist-detectable
-*.tfvars linguist-language=HCL linguist-detectable
-*.yaml linguist-language=YAML linguist-detectable
-*.yml linguist-language=YAML linguist-detectable
-*.sql linguist-language=SQL linguist-detectable
-*.sh linguist-language=Shell linguist-detectable
