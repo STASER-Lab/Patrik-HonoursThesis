@@ -1,19 +1,28 @@
 {
   "version": 2,
-  "description": "Latency of one repository query on one layout, against an existing cluster",
-  "schedule": [
+  "description": "Query latency and throughput of the four layouts, against an existing cluster",
+  "challenges": [
     {
-      "operation": {
-        "name": "{{ query | default('q2') }}-{{ layout | default('s1') }}",
-        "operation-type": "layout-query",
-        "query": "{{ query | default('q2') }}",
-        "layout": "{{ layout | default('s1') }}",
-        "tier": "{{ tier | default('dev') }}",
-        "repo_id": {{ repo_id | default(197275551) }}
-      },
-      "clients": {{ clients | default(1) }},
-      "warmup-iterations": {{ warmup | default(5) }},
-      "iterations": {{ iterations | default(20) }}
+      "name": "latency",
+      "description": "One client. Every verified query, repository and layout, layouts interleaved",
+      "default": true,
+      "schedule": [
+        {% for c in combos %}
+        {
+          "operation": {
+            "name": "{{ c.query }}-{{ c.repo }}-{{ c.layout }}",
+            "operation-type": "layout-query",
+            "query": "{{ c.query }}",
+            "layout": "{{ c.layout }}",
+            "tier": "{{ tier }}",
+            "repo_id": {{ c.repo_id }}
+          },
+          "clients": 1,
+          "warmup-iterations": {{ warmup | default(20) }},
+          "iterations": {{ iterations | default(200) }}
+        }{{ "," if not loop.last }}
+        {% endfor %}
+      ]
     }
   ]
 }

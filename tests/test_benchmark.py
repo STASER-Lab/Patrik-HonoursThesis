@@ -6,6 +6,8 @@ import pytest
 from benchmark import check_answers, repositories
 from benchmark.queries import contributors, q1, q2, q3, q4, q5, q6, q7
 from benchmark.queries.common import ESQL_LIMIT, EsqlRowLimit, esql_rows
+from benchmark.rally import params
+from ingest.load.mappings import LAYOUTS
 
 PR = {
     "repo_id": 10,
@@ -351,3 +353,47 @@ def test_q7_merged_prs_that_close_an_issue():
 
 def test_q7_no_merged_prs():
     assert q7.reference(FakeData(), 10) == {"merged": 0, "closing": 0, "share": None}
+
+
+def _rows(repos, status="pass"):
+    return [
+        {"query": q, "layout": s, "repo_id": r, "status": status}
+        for q in repositories.QUERIES
+        for s in LAYOUTS
+        for r in repos.values()
+    ]
+
+
+def _status(rows):
+    return {(x["query"], x["layout"], x["repo_id"]): x["status"] for x in rows}
+
+
+def test_rally_layouts_rotate_per_repetition():
+    assert params.rotated(LAYOUTS, 0) == ("s1", "s2", "s3", "s4")
+    assert params.rotated(LAYOUTS, 1) == ("s2", "s3", "s4", "s1")
+    assert params.rotated(LAYOUTS, 4) == LAYOUTS
+
+
+def test_rally_uses_newest_complete_check(tmp_path):
+    repos = {"small": 1, "largest": 2}
+    full = tmp_path / "check-dev-20260101-000000.json"
+    full.write_text(json.dumps({"results": _rows(repos)}))
+    partial = tmp_path / "check-dev-20260102-000000.json"
+    partial.write_text(json.dumps({"results": _rows(repos)[:3]}))
+    assert params.latest_check("dev", repos, tmp_path) == full
+
+
+def test_rally_interleaves_layouts_and_skips_limit():
+    status = _status(_rows({"small": 1}))
+    status[("q1", "s4", 1)] = "limit"
+    combos = params.combinations({"small": 1}, status, repetition=1)
+    assert [c["layout"] for c in combos[:3]] == ["s2", "s3", "s1"]
+    assert ("q1", "s4") not in {(c["query"], c["layout"]) for c in combos}
+    assert len(combos) == 7 * 4 - 1
+
+
+def test_rally_refuses_unverified_answers():
+    status = _status(_rows({"small": 1}))
+    status[("q3", "s2", 1)] = "fail"
+    with pytest.raises(SystemExit):
+        params.combinations({"small": 1}, status, repetition=0)
