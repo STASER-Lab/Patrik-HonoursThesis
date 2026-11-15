@@ -1,4 +1,6 @@
+import importlib.util
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -6,6 +8,8 @@ import pytest
 from benchmark import check_answers, repositories
 from benchmark.queries import contributors, q1, q2, q3, q4, q5, q6, q7
 from benchmark.queries.common import ESQL_LIMIT, EsqlRowLimit, esql_rows
+from benchmark.rally import params
+from ingest.load.mappings import LAYOUTS
 
 PR = {
     "repo_id": 10,
@@ -351,3 +355,78 @@ def test_q7_merged_prs_that_close_an_issue():
 
 def test_q7_no_merged_prs():
     assert q7.reference(FakeData(), 10) == {"merged": 0, "closing": 0, "share": None}
+
+
+def _rows(repos, status="pass"):
+    return [
+        {"query": q, "layout": s, "repo_id": r, "status": status}
+        for q in repositories.QUERIES
+        for s in LAYOUTS
+        for r in repos.values()
+    ]
+
+
+def _status(rows):
+    return {(x["query"], x["layout"], x["repo_id"]): x["status"] for x in rows}
+
+
+def test_rally_layouts_rotate_per_repetition():
+    assert params.rotated(LAYOUTS, 0) == ("s1", "s2", "s3", "s4")
+    assert params.rotated(LAYOUTS, 1) == ("s2", "s3", "s4", "s1")
+    assert params.rotated(LAYOUTS, 4) == LAYOUTS
+
+
+def test_rally_uses_newest_complete_check(tmp_path):
+    repos = {"small": 1, "largest": 2}
+    full = tmp_path / "check-dev-20260101-000000.json"
+    full.write_text(json.dumps({"results": _rows(repos)}))
+    partial = tmp_path / "check-dev-20260102-000000.json"
+    partial.write_text(json.dumps({"results": _rows(repos)[:3]}))
+    assert params.latest_check("dev", repos, tmp_path) == full
+
+
+def test_rally_interleaves_layouts_and_skips_limit():
+    status = _status(_rows({"small": 1}))
+    status[("q1", "s4", 1)] = "limit"
+    combos = params.combinations({"small": 1}, status, repetition=1)
+    assert [c["layout"] for c in combos[:3]] == ["s2", "s3", "s1"]
+    assert ("q1", "s4") not in {(c["query"], c["layout"]) for c in combos}
+    assert len(combos) == 7 * 4 - 1
+
+
+def test_rally_refuses_unverified_answers():
+    status = _status(_rows({"small": 1}))
+    status[("q3", "s2", 1)] = "fail"
+    with pytest.raises(SystemExit):
+        params.combinations({"small": 1}, status, repetition=0)
+
+
+def test_rally_mix_holds_each_layouts_timed_combinations():
+    status = _status(_rows({"small": 1}))
+    status[("q1", "s4", 1)] = "limit"
+    mix = params.mixes(params.combinations({"small": 1}, status, repetition=0))
+    assert len(mix["s1"]) == 7
+    assert {"query": "q1", "repo_id": 1} not in mix["s4"]
+
+
+def _layout_mix():
+    path = Path(__file__).parents[1] / "benchmark/rally/track/track.py"
+    spec = importlib.util.spec_from_file_location("rally_track", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.LayoutMix
+
+
+def test_rally_mix_is_identical_across_layouts_per_client():
+    LayoutMix = _layout_mix()
+    mix = [{"query": f"q{i}", "repo_id": i} for i in range(1, 8)]
+
+    def picks(layout, client):
+        source = LayoutMix(
+            None, {"mix": mix, "seed": 0, "layout": layout, "tier": "dev"}
+        )
+        part = source.partition(client, 8)
+        return [part.params()["query"] for _ in range(20)]
+
+    assert picks("s1", 3) == picks("s4", 3)
+    assert picks("s1", 3) != picks("s1", 4)
