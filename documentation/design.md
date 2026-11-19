@@ -69,6 +69,8 @@ Before indexing can happen, the records are turned into bulk files: the format E
 - **S3 (nested):** comments, reviews and links are nested inside their issue or pull request, so there are no child indexes.
 - **S4 (lookup join):** the same documents as S1, but parents are lookup indexes, joined at query time with ES\|QL's `LOOKUP JOIN`.
 
+<img alt="The four layouts" src="assets/images/layouts.png" width="900">
+
 The bulk files and a `summary.json` are saved in `data/bulk/<layout>/`. For S3, the summary also counts documents with more nested objects than Elasticsearch's default limit (10,000). Elasticsearch rejects those documents at load, so the count shows where nesting stops scaling.
 
 `mappings.py` completes the picture of how the four layouts are indexed. It is critical to the research project, as it defines the schema (mapping) of every index in every layout, down to each field's type. A field has the same type in every layout, so layouts are compared like for like. The mappings are also strict: a field without a mapping fails the load instead of being added silently.
