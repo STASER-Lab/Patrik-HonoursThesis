@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
+import shutil
 import sys
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from .mappings import LAYOUTS, S2_COPIED, S2_LINK_COPIED
@@ -20,6 +22,10 @@ ID_FIELD = {
     "review": "review_id",
     "link": "link_key",
 }
+
+# Entities S2 and S3 combine across records. Each carries repo_id, and every parent
+# key lies in the child's repository, so splitting by repo_id keeps families whole.
+LINKED = ("issue", "pull_request", "comment", "review", "link")
 
 # Default index.mapping.nested_objects.limit. S3 documents above it are counted, not
 # split, and Elasticsearch rejects them at load.
@@ -44,14 +50,44 @@ def _copy_link_parents(link: dict, pr: dict, issue: dict | None) -> dict:
     )
 
 
-def documents(layout: str, records_dir: Path) -> Iterator[tuple[str, str, dict]]:
+def spill(records_dir: Path, work: Path, buckets: int) -> list[Path]:
+    """Split the linked entities into `buckets` gzip directories by repo_id."""
+    dirs = [work / str(i) for i in range(buckets)]
+    for d in dirs:
+        d.mkdir(parents=True)
+    for entity in LINKED:
+        out = [
+            gzip.open(d / f"{entity}.ndjson.gz", "wt", compresslevel=1) for d in dirs
+        ]
+        try:
+            with open(records_dir / f"{entity}.ndjson") as f:
+                for line in f:
+                    out[json.loads(line)["repo_id"] % buckets].write(line)
+        finally:
+            for g in out:
+                g.close()
+    return dirs
+
+
+def _read_bucket(bucket: Path, entity: str) -> Iterator[dict]:
+    with gzip.open(bucket / f"{entity}.ndjson.gz", "rt") as f:
+        yield from map(json.loads, f)
+
+
+def documents(
+    layout: str, records_dir: Path, buckets: int = 1, work: Path | None = None
+) -> Iterator[tuple[str, str, dict]]:
     """Yield (entity, document id, document) for one layout.
 
     Document ids are the records' natural keys, so loading twice overwrites rather
-    than duplicates. S2 and S3 hold every issue and PR in memory.
+    than duplicates. S2 and S3 hold every issue and PR of a bucket in memoryy. With
+    buckets > 1 the linked entities are first spilled to `work` by repo_id and each
+    bucket is built alone.
     """
     if layout not in LAYOUTS:
         raise ValueError(layout)
+    if buckets < 1:
+        raise ValueError("buckets must be at least 1")
 
     plain = ID_FIELD if layout in ("s1", "s4") else ("repository", "person")
     for entity in plain:
@@ -60,19 +96,37 @@ def documents(layout: str, records_dir: Path) -> Iterator[tuple[str, str, dict]]
     if layout in ("s1", "s4"):
         return
 
-    issues = {r["issue_key"]: r for r in read_records(records_dir, "issue")}
-    prs = {r["pr_key"]: r for r in read_records(records_dir, "pull_request")}
+    if buckets == 1:
+        yield from _linked(layout, lambda e: read_records(records_dir, e))
+        return
+    if work is None:
+        raise ValueError("buckets > 1 needs a work directory")
+    shutil.rmtree(work, ignore_errors=True)
+    try:
+        for bucket in spill(records_dir, work, buckets):
+            yield from _linked(layout, lambda e, b=bucket: _read_bucket(b, e))
+            shutil.rmtree(bucket)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _linked(
+    layout: str, read: Callable[[str], Iterator[dict]]
+) -> Iterator[tuple[str, str, dict]]:
+    """S2 or S3 documents for issues, PRs and their children from one source."""
+    issues = {r["issue_key"]: r for r in read("issue")}
+    prs = {r["pr_key"]: r for r in read("pull_request")}
 
     if layout == "s2":
         for entity, table in (("issue", issues), ("pull_request", prs)):
             for k, r in table.items():
                 yield entity, k, r
-        for c in read_records(records_dir, "comment"):
+        for c in read("comment"):
             parent = (prs if c["parent_type"] == "pr" else issues)[c["parent_key"]]
             yield "comment", str(c["comment_id"]), _copy_parent(c, parent)
-        for rv in read_records(records_dir, "review"):
+        for rv in read("review"):
             yield "review", str(rv["review_id"]), _copy_parent(rv, prs[rv["pr_key"]])
-        for link in read_records(records_dir, "link"):
+        for link in read("link"):
             yield (
                 "link",
                 link["link_key"],
@@ -83,11 +137,11 @@ def documents(layout: str, records_dir: Path) -> Iterator[tuple[str, str, dict]]
         return
 
     comments, reviews, links = defaultdict(list), defaultdict(list), defaultdict(list)
-    for ln in read_records(records_dir, "link"):
+    for ln in read("link"):
         links[ln["pr_key"]].append(ln)
-    for c in read_records(records_dir, "comment"):
+    for c in read("comment"):
         comments[c["parent_type"], c["parent_key"]].append(c)
-    for rv in read_records(records_dir, "review"):
+    for rv in read("review"):
         reviews[rv["pr_key"]].append(rv)
     for k, r in issues.items():
         kids = sorted(comments["issue", k], key=lambda x: x["created_at"])
@@ -109,13 +163,15 @@ def nested_count(doc: dict) -> int:
     return sum(len(doc.get(key, [])) for key in ("comments", "reviews", "links"))
 
 
-def write_bulk(layout: str, records_dir: Path, out_dir: Path) -> dict:
+def write_bulk(layout: str, records_dir: Path, out_dir: Path, buckets: int = 1) -> dict:
     out = out_dir / layout
     out.mkdir(parents=True, exist_ok=True)
     files, stats = {}, defaultdict(lambda: {"docs": 0, "bytes": 0})
     nested = {"max_per_doc": 0, "docs_over_limit": 0}
     try:
-        for entity, doc_id, doc in documents(layout, records_dir):
+        for entity, doc_id, doc in documents(
+            layout, records_dir, buckets, out / "_buckets"
+        ):
             if entity not in files:
                 files[entity] = open(out / f"{entity}.ndjson", "w")
             src = json.dumps(doc, ensure_ascii=False)
@@ -148,9 +204,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("records", type=Path)
     p.add_argument("--out", type=Path, default=Path("data/bulk"))
     p.add_argument("--layout", choices=LAYOUTS + ("all",), default="all")
+    p.add_argument(
+        "--buckets",
+        type=int,
+        default=1,
+        help="build S2/S3 in N repository buckets one at a time to bound memory",
+    )
     args = p.parse_args(argv)
+    if args.buckets < 1:
+        p.error("--buckets must be at least 1")
     for s in LAYOUTS if args.layout == "all" else (args.layout,):
-        print(json.dumps(write_bulk(s, args.records, args.out)))
+        print(json.dumps(write_bulk(s, args.records, args.out, args.buckets)))
     return 0
 
 

@@ -169,6 +169,72 @@ def test_bulk_file_format_and_ids(records_dir, tmp_path):
     assert s["entities"]["pull_request"]["docs"] == 2
 
 
+REPOS = (10, 11, 12, 13, 14, 15, 16)
+KEYS = ("issue_key", "pr_key", "parent_key", "link_key")
+
+
+@pytest.fixture
+def many_repos_dir(tmp_path):
+    """The sample family copied into several repositories, plus a comment tie."""
+    out = tmp_path / "records"
+    out.mkdir()
+    for entity, table in sample_records().records.items():
+        rows = []
+        for repo in REPOS:
+            for r in table.values():
+                r = dict(r)
+                if "repo_id" in r and entity != "repository":
+                    r["repo_id"] = repo
+                    for k in KEYS:
+                        if k in r:
+                            r[k] = r[k].replace("10/", f"{repo}/")
+                    for k in ("comment_id", "review_id"):
+                        if k in r:
+                            r[k] += repo * 1000
+                rows.append(r)
+                if entity == "comment" and r["parent_type"] == "pr":
+                    rows.append(r | {"comment_id": r["comment_id"] + 500})
+            if entity in ("repository", "person"):
+                break
+        (out / f"{entity}.ndjson").write_text(
+            "".join(json.dumps(r) + "\n" for r in rows)
+        )
+    return out
+
+
+@pytest.mark.parametrize("layout", ("s2", "s3"))
+@pytest.mark.parametrize("buckets", (2, 3, 7, 50))
+def test_buckets_give_the_same_documents(many_repos_dir, tmp_path, layout, buckets):
+    one = list(documents(layout, many_repos_dir))
+    split = list(documents(layout, many_repos_dir, buckets, tmp_path / "work"))
+    assert len(split) == len(one)
+    assert dict(((e, i), d) for e, i, d in split) == dict(
+        ((e, i), d) for e, i, d in one
+    )
+    assert not (tmp_path / "work").exists()
+
+
+def test_bucketed_s3_keeps_tied_children_in_input_order(many_repos_dir, tmp_path):
+    docs = {(e, i): d for e, i, d in documents("s3", many_repos_dir, 3, tmp_path / "w")}
+    ids = [c["comment_id"] for c in docs["pull_request", "12/5"]["comments"]]
+    assert ids == [12077, 12577]
+
+
+def test_write_bulk_with_buckets_matches_and_cleans_up(many_repos_dir, tmp_path):
+    for layout in ("s2", "s3"):
+        a = write_bulk(layout, many_repos_dir, tmp_path / "one")
+        b = write_bulk(layout, many_repos_dir, tmp_path / "many", buckets=4)
+        assert a == b
+        assert not (tmp_path / "many" / layout / "_buckets").exists()
+
+
+def test_buckets_need_a_work_directory(many_repos_dir):
+    with pytest.raises(ValueError):
+        list(documents("s3", many_repos_dir, 2))
+    with pytest.raises(ValueError):
+        list(documents("s3", many_repos_dir, 0))
+
+
 def test_load_batches_split_by_document_count(tmp_path):
     p = tmp_path / "x.ndjson"
     p.write_text(
