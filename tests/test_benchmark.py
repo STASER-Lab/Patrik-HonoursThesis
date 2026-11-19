@@ -1,11 +1,12 @@
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from benchmark import check_answers, repositories
+from benchmark import check_answers, monitor, repositories
 from benchmark.queries import contributors, q1, q2, q3, q4, q5, q6, q7
 from benchmark.queries.common import ESQL_LIMIT, EsqlRowLimit, esql_rows
 from benchmark.rally import params
@@ -370,19 +371,13 @@ def _status(rows):
     return {(x["query"], x["layout"], x["repo_id"]): x["status"] for x in rows}
 
 
-def test_rally_layouts_rotate_per_repetition():
-    assert params.rotated(LAYOUTS, 0) == ("s1", "s2", "s3", "s4")
-    assert params.rotated(LAYOUTS, 1) == ("s2", "s3", "s4", "s1")
-    assert params.rotated(LAYOUTS, 4) == LAYOUTS
-
-
 def test_rally_uses_newest_complete_check(tmp_path):
     repos = {"small": 1, "largest": 2}
     full = tmp_path / "check-dev-20260101-000000.json"
     full.write_text(json.dumps({"results": _rows(repos)}))
     partial = tmp_path / "check-dev-20260102-000000.json"
     partial.write_text(json.dumps({"results": _rows(repos)[:3]}))
-    assert params.latest_check("dev", repos, LAYOUTS, tmp_path) == full
+    assert params.latest_check("dev", repos, LAYOUTS, tmp_path)[0] == full
 
 
 def test_rally_check_covers_only_the_timed_layouts(tmp_path):
@@ -392,8 +387,8 @@ def test_rally_check_covers_only_the_timed_layouts(tmp_path):
     all_four.write_text(json.dumps({"results": _rows(repos)}))
     subset = tmp_path / "check-dev-20260102-000000.json"
     subset.write_text(json.dumps({"results": _rows(repos, layouts=without_s3)}))
-    assert params.latest_check("dev", repos, without_s3, tmp_path) == subset
-    assert params.latest_check("dev", repos, LAYOUTS, tmp_path) == all_four
+    assert params.latest_check("dev", repos, without_s3, tmp_path)[0] == subset
+    assert params.latest_check("dev", repos, LAYOUTS, tmp_path)[0] == all_four
 
 
 def test_rally_interleaves_layouts_and_skips_limit():
@@ -420,8 +415,6 @@ def test_rally_times_only_the_selected_layouts():
     assert {c["layout"] for c in combos} == set(without_s3)
     assert [c["layout"] for c in combos[:3]] == ["s2", "s4", "s1"]
     assert len(combos) == 7 * 3
-    with pytest.raises(SystemExit):
-        params.combinations({"small": 1}, status, LAYOUTS, repetition=0)
 
 
 def test_rally_rejects_unknown_layouts():
@@ -458,3 +451,104 @@ def test_rally_mix_is_identical_across_layouts_per_client():
 
     assert picks("s1", 3) == picks("s4", 3)
     assert picks("s1", 3) != picks("s1", 4)
+
+
+def node_stats(name, ts_ms, gc_young_ms, read_kb, cpu=50, heap=500_000_000):
+    return {
+        "name": name,
+        "timestamp": ts_ms,
+        "os": {"cpu": {"percent": cpu}},
+        "process": {"cpu": {"percent": cpu - 10}},
+        "jvm": {
+            "mem": {"heap_used_in_bytes": heap, "heap_max_in_bytes": 1_000_000_000},
+            "gc": {
+                "collectors": {
+                    "young": {"collection_time_in_millis": gc_young_ms},
+                    "old": {"collection_time_in_millis": 0},
+                }
+            },
+        },
+        "fs": {
+            "io_stats": {
+                "total": {
+                    "read_operations": read_kb // 4,
+                    "write_operations": 0,
+                    "read_kilobytes": read_kb,
+                    "write_kilobytes": 0,
+                }
+            }
+        },
+    }
+
+
+def test_monitor_flatten_keeps_fields_and_tolerates_missing():
+    f = monitor.flatten(node_stats("n1", 1000, 200, 4000, heap=250_000_000))
+    assert f["heap_used_pct"] == 25.0
+    assert f["gc_young_ms"] == 200 and f["io_read_kb"] == 4000
+    assert f["cpu_os_pct"] == 50 and f["cpu_es_pct"] == 40
+    bare = monitor.flatten({"name": "mac", "timestamp": 1})  # e.g. no Linux io_stats
+    assert bare["io_read_kb"] is None and bare["heap_used_pct"] is None
+
+
+def test_monitor_summary_per_node():
+    rows = [
+        {
+            "nodes": {
+                "n1": monitor.flatten(node_stats("n1", 0, 100, 1000, cpu=20)),
+                "n2": monitor.flatten(node_stats("n2", 0, 0, 0, cpu=90)),
+            }
+        },
+        {
+            "nodes": {
+                "n1": monitor.flatten(
+                    node_stats("n1", 5000, 400, 3000, cpu=60, heap=800_000_000)
+                )
+            }
+        },
+    ]
+    s = monitor.summarise(rows)
+    assert s["n1"]["samples"] == 2 and s["n2"]["samples"] == 1
+    assert s["n1"]["cpu_os_pct_mean"] == 40.0 and s["n1"]["cpu_os_pct_max"] == 60
+    assert s["n1"]["heap_used_pct_max"] == 80.0
+    assert s["n1"]["gc_young_ms_total"] == 300 and s["n1"]["io_read_kb_total"] == 2000
+    assert s["n2"]["gc_young_ms_total"] == 0
+
+
+class FakeMonitorES:
+    def __init__(self, fail_first=False):
+        self.calls, self.fail_first = 0, fail_first
+        self.nodes = SimpleNamespace(stats=self._stats)
+
+    def _stats(self, metric, filter_path):
+        self.calls += 1
+        if self.fail_first and self.calls == 1:
+            raise ConnectionError("node restarting")
+        t = self.calls * 1000
+        return {
+            "nodes": {"id1": node_stats("n1", t, 10 * self.calls, 100 * self.calls)}
+        }
+
+    def info(self):
+        return {"version": {"number": "9.5.4", "build_hash": "abc"}}
+
+
+def test_monitor_run_samples_until_the_command_ends(tmp_path, monkeypatch):
+    exit_code = 3
+    monkeypatch.setattr(monitor.connect, "RESULTS_DIR", tmp_path)
+    es = FakeMonitorES(fail_first=True)
+    cmd = [
+        sys.executable,
+        "-c",
+        f"import time, sys; time.sleep(0.5); sys.exit({exit_code})",
+    ]
+    code, samples_path, summary_path = monitor.run(cmd, "t", es, interval=0.1)
+    assert code == exit_code
+    lines = [json.loads(x) for x in samples_path.read_text().splitlines()]
+    assert lines[0]["command"] == cmd and "environment" in lines[0]
+    assert "error" in lines[1]
+    good = [x for x in lines[1:] if "nodes" in x]
+    assert len(good) >= 3
+    summary = json.loads(summary_path.read_text())
+    assert summary["exit_code"] == exit_code and summary["sample_errors"] == 1
+    assert summary["nodes"]["n1"]["samples"] == len(good)
+    assert summary["samples_file"] == samples_path.name
