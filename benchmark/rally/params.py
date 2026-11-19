@@ -18,20 +18,16 @@ def rotated(layouts: tuple[str, ...], repetition: int) -> tuple[str, ...]:
 
 def latest_check(
     tier: str, repos: dict[str, int], layouts: tuple[str, ...], results_dir: Path
-) -> Path:
+) -> tuple[Path, dict[tuple[str, str, int], str]]:
     """Newest check_answers result that covers every query, repository and the
-    layouts being timed."""
+    layouts being timed, with its status per (query, layout, repo_id)."""
     needed = {(q, s, r) for q in QUERIES for s in layouts for r in repos.values()}
     for path in sorted(results_dir.glob(f"check-{tier}-*.json"), reverse=True):
         results = json.loads(path.read_text())["results"]
-        if needed <= {(x["query"], x["layout"], x["repo_id"]) for x in results}:
-            return path
+        status = {(x["query"], x["layout"], x["repo_id"]): x["status"] for x in results}
+        if needed <= status.keys():
+            return path, status
     raise SystemExit(f"No complete check_answers result for tier {tier!r}")
-
-
-def statuses(check: Path) -> dict[tuple[str, str, int], str]:
-    results = json.loads(check.read_text())["results"]
-    return {(x["query"], x["layout"], x["repo_id"]): x["status"] for x in results}
 
 
 def combinations(
@@ -86,8 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"Unknown layouts {unknown}, expected some of {LAYOUTS}")
 
     repos = json.loads(REPOSITORIES_FILE.read_text())[args.tier]["repos"]
-    check = latest_check(args.tier, repos, layouts, args.results)
-    status = statuses(check)
+    check, status = latest_check(args.tier, repos, layouts, args.results)
     combos = combinations(repos, status, layouts, args.repetition)
     limited = sorted(k for k, s in status.items() if s == "limit" and k[1] in layouts)
 
