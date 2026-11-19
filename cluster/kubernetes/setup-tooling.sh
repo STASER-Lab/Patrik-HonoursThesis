@@ -33,11 +33,11 @@ cd "$REPO"
 .venv/bin/pip install -q -e . --no-deps
 
 echo "==> Rally: Python 3.13 + esrally 2.13.0 in ~/.venvs/esrally"
-# esrally does not support Python 3.14 yet, so it gets its own venv
+# esrally does not support Python 3.14 yet, so it gets its own venv.
 if ! command -v python3.13 >/dev/null; then
   sudo add-apt-repository -y ppa:deadsnakes/ppa
-  sudo apt-get install -y python3.13 python3.13-venv
 fi
+sudo apt-get install -y python3.13 python3.13-venv python3.13-dev build-essential
 [ -d ~/.venvs/esrally ] || python3.13 -m venv ~/.venvs/esrally
 ~/.venvs/esrally/bin/pip install -q esrally==2.13.0
 ~/.venvs/esrally/bin/esrally --version
