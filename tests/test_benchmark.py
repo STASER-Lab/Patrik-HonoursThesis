@@ -514,6 +514,45 @@ def test_monitor_summary_per_node():
     assert s["n2"]["gc_young_ms_total"] == 0
 
 
+def proc_stat(*cores):
+    """/proc/stat text. Each core is (busy, idle). The "cpu" line sums them."""
+
+    def line(name, busy, idle):
+        # user nice system idle iowait irq softirq steal guest guest_nice
+        return f"{name} {busy} 0 0 {idle} 0 0 0 0 99 99"
+
+    lines = [line("cpu", sum(b for b, _ in cores), sum(i for _, i in cores))]
+    lines += [line(f"cpu{n}", b, i) for n, (b, i) in enumerate(cores)]
+    return "\n".join(lines + ["intr 123 4 5", "ctxt 678"]) + "\n"
+
+
+def test_tooling_cpu_total_and_busiest_core(tmp_path):
+    f = tmp_path / "stat"
+    f.write_text(proc_stat((100, 900), (500, 500)))
+    before = monitor.read_proc_stat(f)
+    assert before["cpu0"] == (100, 1000)
+    f.write_text(proc_stat((110, 990), (600, 500)))
+    pct = monitor.cpu_pct(before, monitor.read_proc_stat(f))
+    assert pct == {"cpu_pct": 55.0, "busiest_core_pct": 100.0}
+    assert monitor.read_proc_stat(tmp_path / "missing") is None  # e.g. macOS
+    assert monitor.cpu_pct(None, before) is None
+
+
+def test_tooling_summary():
+    rows = [
+        None,
+        {"cpu_pct": 20.0, "busiest_core_pct": 40.0},
+        {"cpu_pct": 60.0, "busiest_core_pct": 100.0},
+    ]
+    assert monitor.summarise_tooling(rows) == {
+        "samples": 2,
+        "cpu_pct_mean": 40.0,
+        "cpu_pct_max": 60.0,
+        "busiest_core_pct_max": 100.0,
+    }
+    assert monitor.summarise_tooling([None, None]) is None
+
+
 class FakeMonitorES:
     def __init__(self, fail_first=False):
         self.calls, self.fail_first = 0, fail_first
@@ -535,6 +574,9 @@ class FakeMonitorES:
 def test_monitor_run_samples_until_the_command_ends(tmp_path, monkeypatch):
     exit_code = 3
     monkeypatch.setattr(monitor.connect, "RESULTS_DIR", tmp_path)
+    stat = tmp_path / "stat"
+    stat.write_text(proc_stat((0, 0)))
+    monkeypatch.setattr(monitor, "PROC_STAT", stat)
     es = FakeMonitorES(fail_first=True)
     cmd = [
         sys.executable,
@@ -552,3 +594,6 @@ def test_monitor_run_samples_until_the_command_ends(tmp_path, monkeypatch):
     assert summary["exit_code"] == exit_code and summary["sample_errors"] == 1
     assert summary["nodes"]["n1"]["samples"] == len(good)
     assert summary["samples_file"] == samples_path.name
+    assert lines[1]["tooling"] is None
+    assert "tooling" in lines[2]
+    assert summary["tooling"] is None

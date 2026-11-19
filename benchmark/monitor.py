@@ -61,6 +61,52 @@ def flatten(node: dict) -> dict:
     }
 
 
+PROC_STAT = Path("/proc/stat")
+
+
+def read_proc_stat(path: Path | None = None) -> dict[str, tuple[int, int]] | None:
+    path = path or PROC_STAT
+    if not path.exists():
+        return None
+    out = {}
+    for line in path.read_text().splitlines():
+        name, *fields = line.split()
+        if not name.startswith("cpu"):
+            continue
+        t = [int(x) for x in fields[:8]]
+        out[name] = (sum(t) - t[3] - t[4], sum(t))
+    return out
+
+
+def cpu_pct(prev: dict | None, cur: dict | None) -> dict | None:
+    """Busy share of CPU time between two readings: all cores, and the busiest core.
+    One saturated core can bottleneck the client while the total still looks low."""
+    if not prev or not cur:
+        return None
+
+    def pct(name):
+        busy, total = (c - p for c, p in zip(cur[name], prev[name], strict=True))
+        return round(100 * busy / total, 1) if total > 0 else None
+
+    cores = [pct(n) for n in cur if n != "cpu" and n in prev]
+    cores = [c for c in cores if c is not None]
+    return {"cpu_pct": pct("cpu"), "busiest_core_pct": max(cores) if cores else None}
+
+
+def summarise_tooling(rows: list[dict]) -> dict | None:
+    rows = [r for r in rows if r and r.get("cpu_pct") is not None]
+    if not rows:
+        return None
+    total = [r["cpu_pct"] for r in rows]
+    cores = [r["busiest_core_pct"] for r in rows if r["busiest_core_pct"] is not None]
+    return {
+        "samples": len(rows),
+        "cpu_pct_mean": round(sum(total) / len(total), 1),
+        "cpu_pct_max": max(total),
+        "busiest_core_pct_max": max(cores) if cores else None,
+    }
+
+
 def sample(es) -> dict:
     stats = es.nodes.stats(
         metric="os,process,jvm,fs", filter_path=",".join(FILTER_PATH)
@@ -98,7 +144,8 @@ def run(
     connect.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     stamp = f"{datetime.now(UTC):%Y%m%d-%H%M%S}"
     samples_path = connect.RESULTS_DIR / f"monitor-{label}-{stamp}.ndjson"
-    samples, errors = [], 0
+    samples, tooling, errors = [], [], 0
+    cpu_prev = None  # the first sample has no interval yet
     start = time.monotonic()
     proc = subprocess.Popen(command)
 
@@ -116,8 +163,12 @@ def run(
         )
 
         def record() -> None:
-            nonlocal errors
+            nonlocal errors, cpu_prev
             row = {"t_s": round(time.monotonic() - start, 1)}
+            cpu_now = read_proc_stat()
+            row["tooling"] = cpu_pct(cpu_prev, cpu_now)
+            cpu_prev = cpu_now
+            tooling.append(row["tooling"])
             try:
                 nodes = sample(es)
             except Exception as e:  # a failed sample must not stop the run
@@ -153,6 +204,7 @@ def run(
             "sample_errors": errors,
             "samples_file": samples_path.name,
             "nodes": summarise(samples),
+            "tooling": summarise_tooling(tooling),
         },
     )
     return code, samples_path, summary_path
