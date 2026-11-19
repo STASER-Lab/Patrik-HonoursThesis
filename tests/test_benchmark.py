@@ -357,11 +357,11 @@ def test_q7_no_merged_prs():
     assert q7.reference(FakeData(), 10) == {"merged": 0, "closing": 0, "share": None}
 
 
-def _rows(repos, status="pass"):
+def _rows(repos, status="pass", layouts=LAYOUTS):
     return [
         {"query": q, "layout": s, "repo_id": r, "status": status}
         for q in repositories.QUERIES
-        for s in LAYOUTS
+        for s in layouts
         for r in repos.values()
     ]
 
@@ -382,13 +382,24 @@ def test_rally_uses_newest_complete_check(tmp_path):
     full.write_text(json.dumps({"results": _rows(repos)}))
     partial = tmp_path / "check-dev-20260102-000000.json"
     partial.write_text(json.dumps({"results": _rows(repos)[:3]}))
-    assert params.latest_check("dev", repos, tmp_path) == full
+    assert params.latest_check("dev", repos, LAYOUTS, tmp_path) == full
+
+
+def test_rally_check_covers_only_the_timed_layouts(tmp_path):
+    repos = {"small": 1}
+    without_s3 = ("s1", "s2", "s4")
+    all_four = tmp_path / "check-dev-20260101-000000.json"
+    all_four.write_text(json.dumps({"results": _rows(repos)}))
+    subset = tmp_path / "check-dev-20260102-000000.json"
+    subset.write_text(json.dumps({"results": _rows(repos, layouts=without_s3)}))
+    assert params.latest_check("dev", repos, without_s3, tmp_path) == subset
+    assert params.latest_check("dev", repos, LAYOUTS, tmp_path) == all_four
 
 
 def test_rally_interleaves_layouts_and_skips_limit():
     status = _status(_rows({"small": 1}))
     status[("q1", "s4", 1)] = "limit"
-    combos = params.combinations({"small": 1}, status, repetition=1)
+    combos = params.combinations({"small": 1}, status, LAYOUTS, repetition=1)
     assert [c["layout"] for c in combos[:3]] == ["s2", "s3", "s1"]
     assert ("q1", "s4") not in {(c["query"], c["layout"]) for c in combos}
     assert len(combos) == 7 * 4 - 1
@@ -398,13 +409,30 @@ def test_rally_refuses_unverified_answers():
     status = _status(_rows({"small": 1}))
     status[("q3", "s2", 1)] = "fail"
     with pytest.raises(SystemExit):
-        params.combinations({"small": 1}, status, repetition=0)
+        params.combinations({"small": 1}, status, LAYOUTS, repetition=0)
+
+
+def test_rally_times_only_the_selected_layouts():
+    status = _status(_rows({"small": 1}))
+    status[("q3", "s3", 1)] = "fail"
+    without_s3 = ("s1", "s2", "s4")
+    combos = params.combinations({"small": 1}, status, without_s3, repetition=1)
+    assert {c["layout"] for c in combos} == set(without_s3)
+    assert [c["layout"] for c in combos[:3]] == ["s2", "s4", "s1"]
+    assert len(combos) == 7 * 3
+    with pytest.raises(SystemExit):
+        params.combinations({"small": 1}, status, LAYOUTS, repetition=0)
+
+
+def test_rally_rejects_unknown_layouts():
+    with pytest.raises(SystemExit):
+        params.main(["--layouts", "s1,s9"])
 
 
 def test_rally_mix_holds_each_layouts_timed_combinations():
     status = _status(_rows({"small": 1}))
     status[("q1", "s4", 1)] = "limit"
-    mix = params.mixes(params.combinations({"small": 1}, status, repetition=0))
+    mix = params.mixes(params.combinations({"small": 1}, status, LAYOUTS, repetition=0))
     assert len(mix["s1"]) == 7
     assert {"query": "q1", "repo_id": 1} not in mix["s4"]
 

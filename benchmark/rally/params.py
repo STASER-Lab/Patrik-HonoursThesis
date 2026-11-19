@@ -16,8 +16,12 @@ def rotated(layouts: tuple[str, ...], repetition: int) -> tuple[str, ...]:
     return layouts[k:] + layouts[:k]
 
 
-def latest_check(tier: str, repos: dict[str, int], results_dir: Path) -> Path:
-    needed = {(q, s, r) for q in QUERIES for s in LAYOUTS for r in repos.values()}
+def latest_check(
+    tier: str, repos: dict[str, int], layouts: tuple[str, ...], results_dir: Path
+) -> Path:
+    """Newest check_answers result that covers every query, repository and the
+    layouts being timed."""
+    needed = {(q, s, r) for q in QUERIES for s in layouts for r in repos.values()}
     for path in sorted(results_dir.glob(f"check-{tier}-*.json"), reverse=True):
         results = json.loads(path.read_text())["results"]
         if needed <= {(x["query"], x["layout"], x["repo_id"]) for x in results}:
@@ -31,16 +35,19 @@ def statuses(check: Path) -> dict[tuple[str, str, int], str]:
 
 
 def combinations(
-    repos: dict[str, int], status: dict[tuple[str, str, int], str], repetition: int
+    repos: dict[str, int],
+    status: dict[tuple[str, str, int], str],
+    layouts: tuple[str, ...],
+    repetition: int,
 ) -> list[dict]:
-    failed = sorted(k for k, s in status.items() if s == "fail")
+    failed = sorted(k for k, s in status.items() if s == "fail" and k[1] in layouts)
     if failed:
         raise SystemExit(f"check_answers has failures, not timing them: {failed}")
     return [
         {"query": q, "repo": label, "repo_id": repo_id, "layout": s}
         for q in QUERIES
         for label, repo_id in repos.items()
-        for s in rotated(LAYOUTS, repetition)
+        for s in rotated(layouts, repetition)
         if status[(q, s, repo_id)] == "pass"
     ]
 
@@ -58,6 +65,12 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--tier", default="dev")
     p.add_argument("--repetition", type=int, default=0)
+    p.add_argument(
+        "--layouts",
+        default=",".join(LAYOUTS),
+        help="comma-separated layouts to time (default: all). Each must be "
+        "verified by check_answers",
+    )
     p.add_argument("--results", type=Path, default=RESULTS_DIR)
     p.add_argument("--out", type=Path)
     p.add_argument("--warmup", type=int, default=20, help="latency warm-up runs")
@@ -67,15 +80,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--throughput-time", type=int, default=180, help="seconds")
     args = p.parse_args(argv)
 
+    layouts = tuple(args.layouts.split(","))
+    unknown = [s for s in layouts if s not in LAYOUTS]
+    if unknown:
+        raise SystemExit(f"Unknown layouts {unknown}, expected some of {LAYOUTS}")
+
     repos = json.loads(REPOSITORIES_FILE.read_text())[args.tier]["repos"]
-    check = latest_check(args.tier, repos, args.results)
+    check = latest_check(args.tier, repos, layouts, args.results)
     status = statuses(check)
-    combos = combinations(repos, status, args.repetition)
-    limited = sorted(k for k, s in status.items() if s == "limit")
+    combos = combinations(repos, status, layouts, args.repetition)
+    limited = sorted(k for k, s in status.items() if s == "limit" and k[1] in layouts)
 
     out = args.out or Path(f"data/rally/params-{args.tier}-r{args.repetition}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
-    order = rotated(LAYOUTS, args.repetition)
+    order = rotated(layouts, args.repetition)
     track_params = {
         "tier": args.tier,
         "combos": combos,
