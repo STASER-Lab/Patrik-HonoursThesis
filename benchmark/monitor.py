@@ -224,6 +224,8 @@ def main(argv: list[str] | None = None) -> int:
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         p.error("give the command to run after --")
+    if any("esrally" in a for a in command):
+        p.error("run Rally through benchmark/rally/race.sh, not esrally directly")
     if args.interval <= 0:
         p.error("--interval must be positive")
     code, samples_path, summary_path = run(
