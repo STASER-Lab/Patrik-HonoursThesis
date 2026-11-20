@@ -1,7 +1,9 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from ingest.load import index_bulk
 from ingest.load.build_bulk import documents, write_bulk
 from ingest.load.index_bulk import batches
 from ingest.load.mappings import (
@@ -241,3 +243,64 @@ def test_load_batches_split_by_document_count(tmp_path):
         "".join(f'{{"index":{{"_id":"{i}"}}}}\n{{"n":{i}}}\n' for i in range(5))
     )
     assert [len(ops) // 2 for ops, _ in batches(p, 2)] == [2, 2, 1]
+
+
+class FakeLoadES:
+    def __init__(self):
+        self.calls = []
+        rec = lambda name: lambda **kw: self.calls.append((name, kw))  # noqa: E731
+        self.indices = SimpleNamespace(
+            exists=lambda index: False,
+            create=rec("create"),
+            refresh=rec("refresh"),
+            put_settings=rec("put_settings"),
+        )
+
+    def bulk(self, index, operations, filter_path):
+        self.calls.append(("bulk", {"index": index}))
+        return {"errors": False}
+
+    def count(self, index):
+        return {"count": 2}
+
+
+def _bulk_dir(tmp_path):
+    out = tmp_path / "bulk" / "s1"
+    out.mkdir(parents=True)
+    for entity in ("issue", "pull_request"):
+        (out / f"{entity}.ndjson").write_text(
+            "".join(f'{{"index":{{"_id":"{i}"}}}}\n{{"n":{i}}}\n' for i in range(2))
+        )
+    return tmp_path / "bulk"
+
+
+def _run_load(tmp_path, monkeypatch, es):
+    monkeypatch.setattr(index_bulk, "client", lambda env_file: es)
+    saved = {}
+    monkeypatch.setattr(
+        index_bulk, "save_result", lambda name, es, data: saved.update(data) or "x"
+    )
+    argv = ["--layout", "s1", "--bulk-dir", str(_bulk_dir(tmp_path)), "--recreate"]
+    return index_bulk.main(argv), saved
+
+
+def test_load_runs_with_refresh_off_and_times_one_refresh_per_index(
+    tmp_path, monkeypatch
+):
+    es = FakeLoadES()
+    code, saved = _run_load(tmp_path, monkeypatch, es)
+    assert code == 0
+    created = [kw for name, kw in es.calls if name == "create"]
+    assert all(c["settings"]["index"]["refresh_interval"] == "-1" for c in created)
+    assert all(c["settings"]["index"]["number_of_replicas"] == 0 for c in created)
+    order = [(n, kw["index"]) for n, kw in es.calls if n in ("bulk", "refresh")]
+    assert order == [
+        ("bulk", "s1-dev-issue"),
+        ("refresh", "s1-dev-issue"),
+        ("bulk", "s1-dev-pull_request"),
+        ("refresh", "s1-dev-pull_request"),
+    ]
+    assert es.calls[-1][0] == "put_settings"
+    assert es.calls[-1][1]["settings"] == {"index": {"refresh_interval": None}}
+    r = saved["indexes"][0]
+    assert 0 <= r["refresh_seconds"] <= r["seconds"]

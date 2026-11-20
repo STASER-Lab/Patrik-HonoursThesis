@@ -1,8 +1,4 @@
-"""Create one layout's indexes and load its bulk files in fixed-size batches, timed
-
-Only the bulk requests are timed. Indexes must not already hold documents, because
-loading into them would time updates rather than inserts.
-"""
+"""Create one layout's indexes and load its bulk files in fixed-size batches, timed."""
 
 from __future__ import annotations
 
@@ -37,7 +33,8 @@ def create_indexes(es, defs: dict, recreate: bool) -> None:
             if not recreate:
                 sys.exit(f"{name} already exists (use --recreate to replace it)")
             es.indices.delete(index=name)
-        es.indices.create(index=name, settings=d["settings"], mappings=d["mappings"])
+        settings = {"index": {**d["settings"]["index"], "refresh_interval": "-1"}}
+        es.indices.create(index=name, settings=settings, mappings=d["mappings"])
 
 
 def load_index(es, index: str, path: Path, batch_docs: int) -> dict:
@@ -53,6 +50,8 @@ def load_index(es, index: str, path: Path, batch_docs: int) -> dict:
                 errors += 1
                 if len(first_errors) < 3:
                     first_errors.append(err)
+    refresh_start = time.perf_counter()
+    es.indices.refresh(index=index)
     seconds = time.perf_counter() - start
     mb = nbytes / 1e6
     return {
@@ -61,6 +60,7 @@ def load_index(es, index: str, path: Path, batch_docs: int) -> dict:
         "errors": errors,
         "first_errors": first_errors,
         "seconds": round(seconds, 2),
+        "refresh_seconds": round(seconds - (refresh_start - start), 2),
         "docs_per_s": round(docs / seconds) if seconds else None,
         "source_mb": round(mb, 1),
         "source_mb_per_s": round(mb / seconds, 2) if seconds else None,
@@ -96,8 +96,9 @@ def main(argv: list[str] | None = None) -> int:
             f"{r['docs_per_s'] or 0:>8,} docs/s errors {r['errors']}"
         )
         results.append(r)
-
-    es.indices.refresh(index=",".join(defs))
+    es.indices.put_settings(
+        index=",".join(defs), settings={"index": {"refresh_interval": None}}
+    )
     for r in results:
         r["docs_counted"] = es.count(index=r["index"])["count"]
 
