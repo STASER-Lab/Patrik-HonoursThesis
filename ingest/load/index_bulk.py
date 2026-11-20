@@ -85,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
     for idx, path in plan:
         if idx not in defs:
             sys.exit(f"{path} has no index in layout {args.layout}")
+    if missing := sorted(set(defs) - {idx for idx, _ in plan}):
+        sys.exit(f"No bulk file in {args.bulk_dir / args.layout} for {missing}")
 
     es = client(args.env_file)
     create_indexes(es, defs, args.recreate)

@@ -267,7 +267,7 @@ class FakeLoadES:
 def _bulk_dir(tmp_path):
     out = tmp_path / "bulk" / "s1"
     out.mkdir(parents=True)
-    for entity in ("issue", "pull_request"):
+    for entity in ENTITY_FIELDS:  # every S1 index needs a bulk file
         (out / f"{entity}.ndjson").write_text(
             "".join(f'{{"index":{{"_id":"{i}"}}}}\n{{"n":{i}}}\n' for i in range(2))
         )
@@ -294,12 +294,8 @@ def test_load_runs_with_refresh_off_and_times_one_refresh_per_index(
     assert all(c["settings"]["index"]["refresh_interval"] == "-1" for c in created)
     assert all(c["settings"]["index"]["number_of_replicas"] == 0 for c in created)
     order = [(n, kw["index"]) for n, kw in es.calls if n in ("bulk", "refresh")]
-    assert order == [
-        ("bulk", "s1-dev-issue"),
-        ("refresh", "s1-dev-issue"),
-        ("bulk", "s1-dev-pull_request"),
-        ("refresh", "s1-dev-pull_request"),
-    ]
+    names = sorted(f"s1-dev-{e}" for e in ENTITY_FIELDS)
+    assert order == [(step, n) for n in names for step in ("bulk", "refresh")]
     assert es.calls[-1][0] == "put_settings"
     assert es.calls[-1][1]["settings"] == {"index": {"refresh_interval": None}}
     r = saved["indexes"][0]
