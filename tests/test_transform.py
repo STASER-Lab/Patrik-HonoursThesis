@@ -232,6 +232,35 @@ def test_review_creates_review_and_updates_pr():
     assert (r["state"], r["pr_key"], r["author_id"]) == ("approved", "10/5", BOB["id"])
 
 
+def _review(eid, state, at):
+    review = {
+        "id": 55,
+        "user": BOB,
+        "state": state,
+        "body": "",
+        "submitted_at": "2024-01-10T11:30:00Z",
+    }
+    payload = {"action": "created", "pull_request": pr_obj(), "review": review}
+    return ev(eid, "PullRequestReviewEvent", at, payload, actor=BOB)
+
+
+def test_dismissed_review_wins_even_when_read_first():
+    # GH Archive repeats a review when it is dismissed. Hour files are read in
+    # text order (hour 10 before hour 2), so the later event can come first.
+    approved = _review(4, "APPROVED", "2024-01-10T02:00:00Z")
+    dismissed = _review(9, "DISMISSED", "2024-01-10T10:00:00Z")
+    for events in ((approved, dismissed), (dismissed, approved)):
+        assert fold(*events).records["review"][55]["state"] == "dismissed"
+
+
+def test_latest_comment_version_wins_even_when_read_first():
+    old = comment_on_pr(2, at="2024-01-10T11:00:00Z")
+    new = comment_on_pr(8, at="2024-01-10T11:00:00Z")
+    new["created_at"] = "2024-01-10T12:00:00Z"
+    new["payload"]["comment"]["body"] = "edited"
+    assert fold(new, old).records["comment"][77]["body"] == "edited"
+
+
 def test_review_comment_is_a_pr_comment():
     e = ev(
         6,
