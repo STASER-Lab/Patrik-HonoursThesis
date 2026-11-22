@@ -37,11 +37,11 @@ def read_records(records_dir: Path, entity: str) -> Iterator[dict]:
         yield from map(json.loads, f)
 
 
-def _copy_parent(child: dict, parent: dict) -> dict:
+def copy_parent(child: dict, parent: dict) -> dict:
     return child | {f"parent_{k}": parent.get(k) for k in S2_COPIED}
 
 
-def _copy_link_parents(link: dict, pr: dict, issue: dict | None) -> dict:
+def copy_link_parents(link: dict, pr: dict, issue: dict | None) -> dict:
     issue = issue or {}
     return (
         link
@@ -80,7 +80,7 @@ def documents(
     """Yield (entity, document id, document) for one layout.
 
     Document ids are the records' natural keys, so loading twice overwrites rather
-    than duplicates. S2 and S3 hold every issue and PR of a bucket in memoryy. With
+    than duplicates. S2 and S3 hold every issue and PR of a bucket in memory. With
     buckets > 1 the linked entities are first spilled to `work` by repo_id and each
     bucket is built alone.
     """
@@ -123,14 +123,14 @@ def _linked(
                 yield entity, k, r
         for c in read("comment"):
             parent = (prs if c["parent_type"] == "pr" else issues)[c["parent_key"]]
-            yield "comment", str(c["comment_id"]), _copy_parent(c, parent)
+            yield "comment", str(c["comment_id"]), copy_parent(c, parent)
         for rv in read("review"):
-            yield "review", str(rv["review_id"]), _copy_parent(rv, prs[rv["pr_key"]])
+            yield "review", str(rv["review_id"]), copy_parent(rv, prs[rv["pr_key"]])
         for link in read("link"):
             yield (
                 "link",
                 link["link_key"],
-                _copy_link_parents(
+                copy_link_parents(
                     link, prs[link["pr_key"]], issues.get(link["issue_key"])
                 ),
             )
@@ -144,19 +144,23 @@ def _linked(
     for rv in read("review"):
         reviews[rv["pr_key"]].append(rv)
     for k, r in issues.items():
-        kids = sorted(comments["issue", k], key=lambda x: x["created_at"])
-        yield "issue", k, r | {"comments": kids}
+        yield "issue", k, s3_issue(r, comments["issue", k])
     for k, r in prs.items():
-        yield (
-            "pull_request",
-            k,
-            r
-            | {
-                "comments": sorted(comments["pr", k], key=lambda x: x["created_at"]),
-                "reviews": sorted(reviews[k], key=lambda x: x["submitted_at"]),
-                "links": sorted(links[k], key=lambda x: x["number"]),
-            },
-        )
+        yield "pull_request", k, s3_pr(r, comments["pr", k], reviews[k], links[k])
+
+
+def s3_issue(issue: dict, comments: list[dict]) -> dict:
+    """An S3 issue document. Shared by the batch build and the update replay."""
+    return issue | {"comments": sorted(comments, key=lambda x: x["created_at"])}
+
+
+def s3_pr(pr: dict, comments: list, reviews: list, links: list) -> dict:
+    """An S3 pull request document. Shared by the batch build and the update replay."""
+    return pr | {
+        "comments": sorted(comments, key=lambda x: x["created_at"]),
+        "reviews": sorted(reviews, key=lambda x: x["submitted_at"]),
+        "links": sorted(links, key=lambda x: x["number"]),
+    }
 
 
 def nested_count(doc: dict) -> int:

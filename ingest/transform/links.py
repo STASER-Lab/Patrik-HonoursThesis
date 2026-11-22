@@ -45,11 +45,51 @@ def find_references(body: str | None) -> list[tuple[str, str | None, int]]:
     return out
 
 
+def links_for(
+    pr: dict, repo_name: str, issues: dict, prs: dict, stats: Counter | None = None
+) -> dict[str, dict]:
+    """The links one PR's body makes, by link key.
+
+    `issues` and `prs` decide each link's target_type. Cross-repository and self
+    references are skipped. Shared by the batch build and the update replay.
+    """
+    stats = Counter() if stats is None else stats
+    out: dict[str, dict] = {}
+    refs = find_references(pr.get("body"))
+    stats["prs_with_references"] += bool(refs)
+    for keyword, repo, number in refs:
+        if repo is not None and repo.lower() != repo_name:
+            stats["cross_repo_skipped"] += 1
+            continue
+        target = f"{pr['repo_id']}/{number}"
+        if target == pr["pr_key"]:
+            stats["self_reference_skipped"] += 1
+            continue
+        link_key = f"{pr['pr_key']}->{number}"
+        if link_key in out:
+            stats["duplicate_skipped"] += 1
+            continue
+        target_type = (
+            "issue" if target in issues else "pr" if target in prs else "unknown"
+        )
+        out[link_key] = {
+            "link_key": link_key,
+            "repo_id": pr["repo_id"],
+            "pr_key": pr["pr_key"],
+            "issue_key": target,
+            "number": number,
+            "keyword": keyword,
+            "target_type": target_type,
+        }
+        stats[f"target_{target_type}"] += 1
+    return out
+
+
 def add_links(folder) -> dict:
     """Add a link for each number a PR body closes in its own repository.
 
     Run only once every event is folded: a link's target_type depends on which issues
-    and PRs exist. Cross-repository and self references are skipped.
+    and PRs exist.
     """
     repo_names = {
         rid: r.get("name", "").lower()
@@ -59,32 +99,7 @@ def add_links(folder) -> dict:
     links = folder.records["link"]
     stats: Counter[str] = Counter()
     for pr in prs.values():
-        refs = find_references(pr.get("body"))
-        stats["prs_with_references"] += bool(refs)
-        for keyword, repo, number in refs:
-            if repo is not None and repo.lower() != repo_names.get(pr["repo_id"]):
-                stats["cross_repo_skipped"] += 1
-                continue
-            target = f"{pr['repo_id']}/{number}"
-            if target == pr["pr_key"]:
-                stats["self_reference_skipped"] += 1
-                continue
-            link_key = f"{pr['pr_key']}->{number}"
-            if link_key in links:
-                stats["duplicate_skipped"] += 1
-                continue
-            target_type = (
-                "issue" if target in issues else "pr" if target in prs else "unknown"
-            )
-            links[link_key] = {
-                "link_key": link_key,
-                "repo_id": pr["repo_id"],
-                "pr_key": pr["pr_key"],
-                "issue_key": target,
-                "number": number,
-                "keyword": keyword,
-                "target_type": target_type,
-            }
-            stats[f"target_{target_type}"] += 1
+        name = repo_names.get(pr["repo_id"])
+        links.update(links_for(pr, name, issues, prs, stats))
     stats["links"] = len(links)
     return dict(stats)

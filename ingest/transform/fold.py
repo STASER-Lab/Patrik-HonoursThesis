@@ -116,16 +116,21 @@ class Folder:
         parent: str,
         version: Version,
     ) -> None:
-        self.records["comment"][c["id"]] = {
-            "comment_id": c["id"],
-            "repo_id": rid,
-            "kind": kind,
-            "parent_type": parent_type,
-            "parent_key": parent,
-            **self._person(c["user"], version),
-            "body": c.get("body"),
-            "created_at": c["created_at"],
-        }
+        self._upsert(
+            "comment",
+            c["id"],
+            version,
+            {
+                "comment_id": c["id"],
+                "repo_id": rid,
+                "kind": kind,
+                "parent_type": parent_type,
+                "parent_key": parent,
+                **self._person(c["user"], version),
+                "body": c.get("body"),
+                "created_at": c["created_at"],
+            },
+        )
 
     def add(self, ev: dict) -> None:
         t, pl = ev["type"], ev["payload"]
@@ -153,16 +158,22 @@ class Folder:
         elif t == "PullRequestReviewEvent":
             parent = self._pr_snapshot(rid, pl["pull_request"], version)
             r = pl["review"]
-            # Reviews and comments are written once: GH Archive records no edits
-            self.records["review"][r["id"]] = {
-                "review_id": r["id"],
-                "repo_id": rid,
-                "pr_key": parent,
-                **self._person(r["user"], version),
-                "state": (r.get("state") or "").lower() or None,
-                "body": r.get("body"),
-                "submitted_at": r["submitted_at"],
-            }
+            # A review can appear again with a new state (e.g. dismissed), so the
+            # latest event wins, as for issues and PRs, whatever the file order
+            self._upsert(
+                "review",
+                r["id"],
+                version,
+                {
+                    "review_id": r["id"],
+                    "repo_id": rid,
+                    "pr_key": parent,
+                    **self._person(r["user"], version),
+                    "state": (r.get("state") or "").lower() or None,
+                    "body": r.get("body"),
+                    "submitted_at": r["submitted_at"],
+                },
+            )
 
         elif t == "PullRequestReviewCommentEvent":
             parent = self._pr_snapshot(rid, pl["pull_request"], version)
