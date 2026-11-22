@@ -1,9 +1,12 @@
 import gzip
 import json
+from types import SimpleNamespace
 
 import pytest
 
-from benchmark.replay.derive import Deriver, State, hour_order, run
+from benchmark.replay import reset, run
+from benchmark.replay.derive import Deriver, State, hour_order
+from benchmark.replay.derive import run as derive_run
 from benchmark.replay.verify import compare
 from ingest.load.mappings import LAYOUTS
 from ingest.transform.build_records import run as build_records
@@ -236,7 +239,7 @@ def replayed(tmp_path):
     _write_hour(both / "2025-01-10-10.json.gz", window)
     build_records(sorted(raw24.glob("*.gz")), None, tmp_path / "rec24")
     build_records(sorted(both.glob("*.gz")), None, tmp_path / "combined")
-    summary = run(
+    summary = derive_run(
         list(raw25.glob("*.gz")), tmp_path / "rec24", tmp_path / "replay", "t"
     )
     return tmp_path, summary
@@ -269,3 +272,107 @@ def test_summary_counts_every_event_and_expected_docs(replayed):
     }
     # S3 rewrites whole PRs, so it writes more Lucene docs than S1 per event
     assert summary["s3"]["docs_per_event"] > summary["s1"]["docs_per_event"]
+
+
+class FakeES:
+    """Records calls. `docs` maps index name to its document count."""
+
+    def __init__(self, docs):
+        self.docs, self.calls = dict(docs), []
+        call = lambda name: lambda **kw: self.calls.append((name, kw))  # noqa: E731
+        self.indices = SimpleNamespace(
+            exists=lambda index: index in self.docs,
+            delete=self._delete,
+            clone=self._clone,
+            put_settings=call("put_settings"),
+            refresh=call("refresh"),
+        )
+        self.cluster = SimpleNamespace(health=call("health"))
+
+    def _delete(self, index):
+        self.calls.append(("delete", {"index": index}))
+        del self.docs[index]
+
+    def _clone(self, index, target, settings):
+        self.calls.append(("clone", {"index": index, "target": target, **settings}))
+        self.docs[target] = self.docs[index]
+
+    def count(self, index):
+        return {"count": self.docs[index]}
+
+    def bulk(self, operations, filter_path):
+        self.calls.append(("bulk", {"n": len(operations)}))
+        return {"errors": False}
+
+
+def test_prepare_write_blocks_before_cloning_to_base():
+    es = FakeES({"s1-t-issue": 3})
+    reset.prepare(es, ["s1-t-issue"])
+    assert [n for n, _ in es.calls[:2]] == ["put_settings", "clone"]
+    assert es.calls[0][1]["settings"] == {"index.blocks.write": True}
+    assert es.calls[1][1]["target"] == "base-s1-t-issue"
+
+
+def test_reset_clones_back_with_no_replicas_refresh_off_and_writes_allowed():
+    es = FakeES({"s1-t-issue": 5, "base-s1-t-issue": 3})
+    reset.reset(es, ["s1-t-issue"])
+    (_, deleted), (_, cloned) = es.calls[:2]
+    assert deleted == {"index": "s1-t-issue"}
+    assert cloned == {
+        "index": "base-s1-t-issue",
+        "target": "s1-t-issue",
+        "index.number_of_replicas": 0,
+        "index.refresh_interval": "-1",
+        "index.blocks.write": None,
+    }
+    assert es.docs["s1-t-issue"] == 3
+
+
+def _writes_file(path, ops_per_event):
+    op = [{"index": {"_index": "s1-t-issue", "_id": "1"}}, '{"a": 1}']
+    with open(path, "w") as f:
+        for n in ops_per_event:
+            f.write(json.dumps({"event": "e", "ops": [op] * n}) + "\n")
+    return path
+
+
+def test_batches_count_events_with_no_writes(tmp_path):
+    path = _writes_file(tmp_path / "w.ndjson", [1, 0, 2, 0, 0])
+    got = [(len(ops) // 2, n) for ops, n in run.batches(path, 2)]
+    assert got == [(1, 2), (2, 2), (0, 1)]
+
+
+def test_run_sends_batches_then_one_refresh_and_restores_refresh(tmp_path, monkeypatch):
+    out = tmp_path / "replay" / "s1"
+    out.mkdir(parents=True)
+    _writes_file(out / "writes.ndjson", [1, 0, 2, 0, 0])
+    summary = {
+        "ops": 3,
+        "docs": 3,
+        "bytes": 30,
+        "ops_per_event": 0.6,
+        "docs_per_event": 0.6,
+        "bytes_per_event": 6.0,
+        "expected_counts": {"s1-t-issue": 3},
+    }
+    (out / "summary.json").write_text(json.dumps(summary))
+    es = FakeES({"s1-t-issue": 3, "base-s1-t-issue": 3})
+    monkeypatch.setattr(run, "client", lambda env_file: es)
+    saved = {}
+    monkeypatch.setattr(run, "save_result", lambda n, es, d: saved.update(d) or "x")
+    argv = [
+        "--layout",
+        "s1",
+        "--tier",
+        "t",
+        "--writes",
+        str(tmp_path / "replay"),
+        "--batch-events",
+        "2",
+    ]
+    assert run.main(argv) == 0
+    steps = [n for n, _ in es.calls]
+    assert steps == ["bulk", "bulk", "refresh", "put_settings"]  # empty batch skipped
+    assert es.calls[-1][1]["settings"] == {"index": {"refresh_interval": None}}
+    assert saved["events"] == 5 and saved["requests"] == 2
+    assert 0 <= saved["refresh_seconds"] <= saved["seconds"]
